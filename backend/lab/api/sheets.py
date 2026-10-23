@@ -126,7 +126,7 @@ class SheetSerializer(serializers.ModelSerializer):
 class AbilitySerializer(serializers.ModelSerializer):
     rules_verified = serializers.SerializerMethodField()
 
-    def get_rules_verified(self, obj):
+    def get_rules_verified(self, obj) -> bool | None:
         return bool(obj.catalog_entry.template.get('verified')) if obj.catalog_entry_id else None
 
     class Meta:

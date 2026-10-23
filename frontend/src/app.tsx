@@ -55,6 +55,7 @@ import Dashboard from "./pages/Dashboard";
 import { useRoomSync } from "./features/room/useRoomSync";
 const Room = lazy(() => import("./pages/Room"));
 const Sheets = lazy(() => import("./pages/Sheets"));
+const SpellCatalog = lazy(() => import("./features/sheets/SpellCatalog"));
 const Effects = lazy(() => import("./pages/Effects"));
 const Quests = lazy(() => import("./pages/Quests"));
 const Casino = lazy(() => import("./pages/Casino"));
@@ -258,6 +259,7 @@ export default function App() {
                 <Route path="/player" element={<Dashboard/>}/>
                 <Route path="/room" element={<Scoped><Room/></Scoped>}/>
                 <Route path="/sheet" element={<Scoped><Sheets/></Scoped>}/>
+                <Route path="/spells" element={<Scoped><SpellCatalog/></Scoped>}/>
                 <Route path="/master" element={campaign?.role === "dm" ? <Room/> : <Navigate to="/room" replace/>}/>
                 <Route path="/master/sheets" element={campaign?.role === "dm" ? <Sheets/> : <Navigate to="/sheet" replace/>}/>
                 <Route
@@ -329,11 +331,13 @@ function Shell({ children }: { children: ReactNode }) {
   const nav = (a.masterMode ? [
     ["/master", "Стол мастера", Radio],
     ["/master/sheets", "Листы группы", BookOpen],
+    ["/spells", "Справочник заклинаний", FlaskConical],
     ["/dm", "Управление кампанией", SlidersHorizontal],
     ["/profile", "Мой профиль", UserRound],
   ] : [
     ["/room", "Игровая комната", Radio],
     ["/sheet", "Мой персонаж", BookOpen],
+    ["/spells", "Справочник заклинаний", FlaskConical],
     ["/", "Обзор", LayoutDashboard],
     ["/effects", "Эффекты", Layers],
     ["/quests", "Мини-квесты", Flag],

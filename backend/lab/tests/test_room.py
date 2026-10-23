@@ -260,6 +260,24 @@ def test_player_initiative_once(world):
     assert InitiativeEntry.objects.count() == 1
 
 
+def test_master_resets_initiative_and_player_can_roll_again(world):
+    dm, p, o, c, char, s = world
+    roll_url = scoped('/api/room/rolls/', c)
+    initiative_url = scoped('/api/room/initiative/', c)
+    assert post(client(p), roll_url, {'character': char.id, 'kind': 'initiative'}).status_code == 200
+    tracker = InitiativeTracker.objects.get(session=s)
+    assert post(client(p), initiative_url, {'action': 'reset', 'version': tracker.version}).status_code == 403
+    start = post(client(dm), initiative_url, {'action': 'start', 'version': tracker.version})
+    assert start.status_code == 200
+    reset = post(client(dm), initiative_url, {'action': 'reset', 'version': start.json()['data']['version']})
+    assert reset.status_code == 200
+    state = reset.json()['data']
+    assert state['entries'] == [] and state['round_number'] == 0 and not state['running']
+    assert InitiativeEntry.objects.filter(tracker=tracker).count() == 0
+    assert post(client(p), roll_url, {'character': char.id, 'kind': 'initiative'}).status_code == 200
+    assert InitiativeEntry.objects.filter(tracker=tracker, character=char).count() == 1
+
+
 def test_ability_crud_and_validation(world):
     dm, p, o, c, char, s = world
     url = scoped(f"/api/characters/{char.id}/abilities/", c)

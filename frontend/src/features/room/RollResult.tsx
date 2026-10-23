@@ -19,6 +19,8 @@ export function RollResult({ event, large = false }: { event: Json; large?: bool
     {p.kind === 'spell' && <div className="inline-tags"><Badge>{p.slot_level === 0 ? 'Заговор' : `Ячейка ${p.slot_level} ур.`}</Badge>{p.concentration && <Badge>Концентрация</Badge>}</div>}
     {event.kind === 'resource' && <p>{p.amount > 0 && <b>{p.amount} · </b>}Хиты: {p.hp_current}/{p.hp_max}</p>}
     {p.description && <details><summary>Описание действия</summary><p className="preserve-lines">{p.description}</p></details>}
+    {p.adjudication && <p className="save-callout" role="status">{p.adjudication}</p>}
+    {p.components && <small>Компоненты: {p.components}</small>}
     {p.kind && <small className="muted">Урон и лечение применяются после решения за столом.</small>}
   </motion.article>;
 }
