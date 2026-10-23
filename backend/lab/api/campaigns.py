@@ -1,0 +1,209 @@
+from django.db import transaction
+from django.shortcuts import get_object_or_404
+from rest_framework import viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework.exceptions import ValidationError, PermissionDenied
+from drf_spectacular.utils import extend_schema
+from drf_spectacular.types import OpenApiTypes
+from lab.models import *
+from lab.services.casino import ensure_configs, wallet_for
+from lab.services.effects import finish_session
+from .serializers import *
+from .common import *
+
+
+def number(value):
+    try:
+        if (
+            type(value) not in [str, int]
+            or isinstance(value, str)
+            and not value.isdigit()
+        ):
+            raise ValueError()
+        n = int(value)
+        if n < 1:
+            raise ValueError()
+        return n
+    except (TypeError, ValueError):
+        raise ValidationError("Ожидается положительный ID")
+
+
+def own_character(request, campaign, pk, dm=False):
+    character = get_object_or_404(
+        Character, pk=number(pk), campaign=campaign, active=True
+    )
+    if character.owner_id != request.user.pk and not dm:
+        raise PermissionDenied("Это чужой персонаж")
+    return character
+
+
+class CampaignViewSet(viewsets.ModelViewSet):
+    serializer_class = CampaignSerializer
+    http_method_names = ["get", "post", "patch", "head", "options"]
+    search_fields = ["name"]
+    ordering_fields = ["name", "created_at"]
+
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return Campaign.objects.none()
+        return Campaign.objects.filter(
+            memberships__user=self.request.user, memberships__active=True
+        ).order_by("-created_at")
+
+    def perform_create(self, serializer):
+        with transaction.atomic():
+            campaign = serializer.save(owner=self.request.user)
+            Membership.objects.create(
+                campaign=campaign, user=self.request.user, role="dm"
+            )
+            ensure_configs(campaign)
+            wallet_for(campaign, self.request.user)
+
+    def partial_update(self, request, *args, **kwargs):
+        def op(c):
+            form = self.get_serializer(c, data=request.data, partial=True)
+            form.is_valid(raise_exception=True)
+            form.save()
+            return form.data
+
+        return mutate(request, kwargs["pk"], op, True)
+
+    @action(detail=False, methods=["post"], url_path="join")
+    @extend_schema(request=OpenApiTypes.OBJECT, responses=CampaignSerializer)
+    def join(self, request):
+        code = request.data.get("code", "")
+        with transaction.atomic():
+            campaign = get_object_or_404(
+                Campaign.objects.select_for_update(), invite_code=code
+            )
+            member, created = Membership.objects.get_or_create(
+                campaign=campaign, user=request.user
+            )
+            if not created and not member.active:
+                raise PermissionDenied("Доступ отключён мастером")
+            wallet_for(campaign, request.user)
+            AuditLog.objects.create(
+                campaign=campaign,
+                actor=request.user,
+                action="membership.join",
+                details={},
+            )
+        return Response(self.get_serializer(campaign).data)
+
+    @action(detail=True, methods=["get"])
+    def members(self, request, pk=None):
+        campaign = campaign_for(request, pk)
+        return Response(
+            list(
+                Membership.objects.filter(campaign=campaign).values(
+                    "id", "user_id", "user__first_name", "user__email", "role", "active"
+                )
+            )
+            if is_dm(campaign, request.user)
+            else list(
+                Membership.objects.filter(campaign=campaign, active=True).values(
+                    "id", "user_id", "user__first_name", "role"
+                )
+            )
+        )
+
+    @action(detail=True, methods=["get", "post"])
+    @extend_schema(request=SessionSerializer, responses=SessionSerializer(many=True))
+    def sessions(self, request, pk=None):
+        if request.method == "GET":
+            return Response(
+                SessionSerializer(
+                    GameSession.objects.filter(
+                        campaign=campaign_for(request, pk)
+                    ).order_by("-created_at"),
+                    many=True,
+                ).data
+            )
+
+        def op(c):
+            form = SessionSerializer(data=request.data)
+            form.is_valid(raise_exception=True)
+            form.save(campaign=c)
+            return form.data
+
+        return mutate(request, pk, op, True)
+
+
+class CharacterViewSet(viewsets.ModelViewSet):
+    serializer_class = CharacterSerializer
+    http_method_names = ["get", "post", "patch", "head", "options"]
+    search_fields = ["name", "character_class"]
+    ordering_fields = ["name", "level"]
+
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return Character.objects.none()
+        campaign = campaign_for(self.request)
+        return Character.objects.filter(campaign=campaign).order_by("name")
+
+    def create(self, request, *args, **kwargs):
+        def op(c):
+            form = self.get_serializer(data=request.data)
+            form.is_valid(raise_exception=True)
+            form.save(campaign=c, owner=request.user)
+            return form.data
+
+        return mutate(request, request.data.get("campaign"), op)
+
+    def partial_update(self, request, *args, **kwargs):
+        def op(c):
+            obj = own_character(request, c, kwargs["pk"], is_dm(c, request.user))
+            form = self.get_serializer(obj, data=request.data, partial=True)
+            form.is_valid(raise_exception=True)
+            form.save()
+            return form.data
+
+        return mutate(request, request.query_params.get("campaign"), op)
+
+
+class SessionViewSet(viewsets.GenericViewSet):
+    serializer_class = SessionSerializer
+    queryset = GameSession.objects.none()
+
+    @extend_schema(request=SessionSerializer, responses=SessionSerializer)
+    def partial_update(self, request, *args, **kwargs):
+        def op(c):
+            obj = get_object_or_404(GameSession, pk=kwargs["pk"], campaign=c)
+            if obj.status == "completed":
+                raise ValidationError("Завершённая сессия неизменяема")
+            form = SessionSerializer(obj, data=request.data, partial=True)
+            form.is_valid(raise_exception=True)
+            form.save()
+            return form.data
+
+        return mutate(request, request.query_params.get("campaign"), op, True)
+
+    @action(detail=True, methods=["post"])
+    @extend_schema(request=None, responses=SessionSerializer)
+    def start(self, request, pk=None):
+        return self.transition(request, pk, "active")
+
+    @action(detail=True, methods=["post"])
+    @extend_schema(request=None, responses=SessionSerializer)
+    def finish(self, request, pk=None):
+        return self.transition(request, pk, "completed")
+
+    def transition(self, request, pk, status):
+        def op(c):
+            obj = get_object_or_404(GameSession, pk=pk, campaign=c)
+            if status == "active":
+                if (
+                    obj.status != "planned"
+                    or GameSession.objects.filter(campaign=c, status="active").exists()
+                ):
+                    raise ValidationError("Нельзя запустить эту сессию")
+                obj.status = "active"
+                obj.save()
+            else:
+                if obj.status != "active":
+                    raise ValidationError("Сессия не активна")
+                finish_session(obj)
+            return SessionSerializer(obj).data
+
+        return mutate(request, request.query_params.get("campaign"), op, True)

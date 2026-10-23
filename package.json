@@ -1,0 +1,1 @@
+{"name":"sessionlab-workspace","private":true,"scripts":{"dev":"node scripts/dev.mjs"}}

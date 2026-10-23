@@ -1,0 +1,67 @@
+from django.contrib import admin
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
+from lab.api.auth import *
+from lab.api.campaigns import *
+from lab.api.play import *
+from lab.api.dm import *
+from lab.api.health import health
+from lab.api.sheets import SheetView, SheetResource, AbilitiesView, AbilityDetail, RollView, AbilityUse, SpellCatalogView, AddCatalogSpell
+from lab.api.room import RoomView, RoomEvents, InitiativeView, room_stream
+
+router = DefaultRouter()
+for prefix, view, base in [
+    ("campaigns", CampaignViewSet, "campaign"),
+    ("characters", CharacterViewSet, "character"),
+    ("sessions", SessionViewSet, "session"),
+    ("effects", EffectList, "effect"),
+    ("quests", QuestList, "quest"),
+    ("casino/transactions", Transactions, "transaction"),
+    ("dm/effects", DMEffects, "dm-effect"),
+    ("dm/quests", DMQuests, "dm-quest"),
+]:
+    router.register(prefix, view, basename=base)
+urlpatterns = [
+    path("api/room/", RoomView.as_view()),
+    path("api/room/events/", RoomEvents.as_view()),
+    path("api/room/rolls/", RollView.as_view()),
+    path("api/room/initiative/", InitiativeView.as_view()),
+    path("api/campaigns/<int:pk>/stream/", room_stream),
+    path("api/characters/<int:pk>/sheet/", SheetView.as_view()),
+    path("api/characters/<int:pk>/resources/", SheetResource.as_view()),
+    path("api/characters/<int:pk>/abilities/", AbilitiesView.as_view()),
+    path("api/characters/<int:pk>/spells/catalog/", AddCatalogSpell.as_view()),
+    path("api/spells/catalog/", SpellCatalogView.as_view()),
+    path("api/abilities/<int:pk>/", AbilityDetail.as_view()),
+    path("api/abilities/<int:pk>/use/", AbilityUse.as_view()),
+    path("api/health/", health),
+    path("admin/", admin.site.urls),
+    path("api/auth/csrf/", CsrfView.as_view()),
+    path("api/auth/register/", RegisterView.as_view()),
+    path("api/auth/login/", LoginView.as_view()),
+    path("api/auth/logout/", LogoutView.as_view()),
+    path("api/auth/me/", MeView.as_view()),
+    path("api/sessions/<int:pk>/<str:module>/roll/", SessionPlay.as_view()),
+    path("api/sessions/<int:pk>/<str:module>/my/", SessionPlay.as_view()),
+    path("api/active-effects/<int:pk>/<str:verb>/", RollAction.as_view()),
+    path("api/quest-assignments/<int:pk>/submit/", QuestSubmit.as_view()),
+    path("api/history/<str:module>/", History.as_view()),
+    path("api/feed/", Feed.as_view()),
+    path("api/exchanges/", ExchangeView.as_view()),
+    path("api/exchanges/<int:pk>/consent/", ExchangeConsent.as_view()),
+    path("api/casino/games/", CasinoGames.as_view()),
+    path("api/casino/wallet/", WalletView.as_view()),
+    path("api/casino/rounds/", Rounds.as_view()),
+    path("api/casino/stats/", Stats.as_view()),
+    path("api/casino/<str:game>/rounds/", RoundCreate.as_view()),
+    path("api/casino/rounds/<int:pk>/actions/", RoundAction.as_view()),
+    path("api/dm/overview/", DMOverview.as_view()),
+    path("api/dm/actions/<str:kind>/<int:pk>/", DMAction.as_view()),
+    path("api/dm/config/<str:game>/", DMConfig.as_view()),
+    path("api/dm/pools/", DMPools.as_view()),
+    path("api/dm/history/<str:kind>/", DMHistory.as_view()),
+    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+    path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema")),
+    path("api/", include(router.urls)),
+]

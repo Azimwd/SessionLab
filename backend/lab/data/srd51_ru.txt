@@ -1,0 +1,249 @@
+Resistance|Сопротивление
+Produce Flame|Сотворение пламени
+Shillelagh|Дубинка
+Message|Сообщение
+Animal Friendship|Дружба с животными
+Bane|Порча
+Comprehend Languages|Понимание языков
+Hideous Laughter|Жуткий смех
+Illusory Script|Иллюзорная письменность
+Longstrider|Скороход
+Silent Image|Безмолвный образ
+Speak with Animals|Разговор с животными
+Unseen Servant|Невидимый слуга
+Bless|Благословение
+Command|Приказ
+Create or Destroy Water|Сотворение или уничтожение воды
+Detect Evil and Good|Обнаружение добра и зла
+Detect Poison and Disease|Обнаружение яда и болезней
+Guiding Bolt|Направляющий снаряд
+Inflict Wounds|Нанесение ран
+Protection from Evil and Good|Защита от добра и зла
+Purify Food and Drink|Очищение пищи и питья
+Sanctuary|Убежище
+Shield of Faith|Щит веры
+Entangle|Опутывание
+Fog Cloud|Туманное облако
+Goodberry|Чудо-ягоды
+Jump|Прыжок
+Divine Favor|Божественное благоволение
+Hunter's Mark|Метка охотника
+Color Spray|Цветные брызги
+Expeditious Retreat|Ускоренное отступление
+False Life|Ложная жизнь
+Hellish Rebuke|Адское возмездие
+Find Familiar|Поиск фамильяра
+Floating Disk|Парящий диск
+Grease|Скольжение
+Animal Messenger|Животное-посланник
+Calm Emotions|Успокоение эмоций
+Enhance Ability|Улучшение характеристики
+Enthrall|Увлечение
+Heat Metal|Нагрев металла
+Knock|Стук
+Locate Animals or Plants|Поиск животных или растений
+Locate Object|Поиск предмета
+Magic Mouth|Волшебные уста
+See Invisibility|Видение невидимого
+Silence|Тишина
+Zone of Truth|Зона истины
+Aid|Подмога
+Augury|Гадание
+Continual Flame|Вечное пламя
+Find Traps|Поиск ловушек
+Gentle Repose|Нетленные останки
+Prayer of Healing|Молитва исцеления
+Protection from Poison|Защита от яда
+Spiritual Weapon|Духовное оружие
+Warding Bond|Охраняющая связь
+Barkskin|Дубовая кора
+Darkvision|Тёмное зрение
+Flame Blade|Пламенный клинок
+Flaming Sphere|Пылающая сфера
+Gust of Wind|Порыв ветра
+Moonbeam|Лунный луч
+Pass without Trace|Бесследное передвижение
+Spike Growth|Шипы
+Branding Smite|Клеймящая кара
+Find Steed|Поиск скакуна
+Magic Weapon|Магическое оружие
+Alter Self|Изменение облика
+Blur|Размытый образ
+Enlarge/Reduce|Увеличение или уменьшение
+Levitate|Левитация
+Mirror Image|Зеркальный образ
+Spider Climb|Паучье лазание
+Web|Паутина
+Ray of Enfeeblement|Ослабляющий луч
+Acid Arrow|Кислотная стрела
+Arcane Lock|Волшебный замок
+Arcanist’s Magic Aura|Магическая аура арканиста
+Rope Trick|Верёвочный трюк
+Bestow Curse|Наложение проклятия
+Clairvoyance|Ясновидение
+Fear|Страх
+Glyph of Warding|Охранная руна
+Hypnotic Pattern|Гипнотический узор
+Major Image|Большой образ
+Nondetection|Необнаружимость
+Plant Growth|Рост растений
+Sending|Послание
+Speak with Dead|Разговор с мёртвыми
+Speak with Plants|Разговор с растениями
+Stinking Cloud|Зловонное облако
+Tiny Hut|Крошечная хижина
+Tongues|Языки
+Animate Dead|Оживление мёртвых
+Beacon of Hope|Маяк надежды
+Create Food and Water|Сотворение пищи и воды
+Daylight|Дневной свет
+Magic Circle|Магический круг
+Mass Healing Word|Массовое лечащее слово
+Meld into Stone|Слияние с камнем
+Protection from Energy|Защита от энергии
+Remove Curse|Снятие проклятия
+Spirit Guardians|Духовные стражи
+Water Walk|Хождение по воде
+Call Lightning|Призыв молнии
+Conjure Animals|Призыв животных
+Sleet Storm|Метель
+Water Breathing|Дыхание под водой
+Wind Wall|Стена ветра
+Blink|Мерцание
+Gaseous Form|Газообразная форма
+Slow|Замедление
+Vampiric Touch|Прикосновение вампира
+Phantom Steed|Призрачный скакун
+Compulsion|Принуждение
+Confusion|Смятение
+Freedom of Movement|Свобода перемещения
+Hallucinatory Terrain|Иллюзорная местность
+Locate Creature|Поиск существа
+Control Water|Управление водой
+Death Ward|Оберег от смерти
+Divination|Прорицание
+Guardian of Faith|Страж веры
+Stone Shape|Формирование камня
+Blight|Увядание
+Conjure Minor Elementals|Призыв малых элементалей
+Conjure Woodland Beings|Призыв лесных существ
+Dominate Beast|Подчинение зверя
+Giant Insect|Гигантское насекомое
+Ice Storm|Град
+Stoneskin|Каменная кожа
+Arcane Eye|Волшебный глаз
+Black Tentacles|Чёрные щупальца
+Fabricate|Изготовление
+Faithful Hound|Верный пёс
+Fire Shield|Огненный щит
+Phantasmal Killer|Призрачный убийца
+Private Sanctum|Личное святилище
+Resilient Sphere|Упругая сфера
+Secret Chest|Тайный сундук
+Animate Objects|Оживление предметов
+Awaken|Пробуждение
+Dominate Person|Подчинение личности
+Dream|Сонное послание
+Geas|Обет
+Legend Lore|Сказание
+Mass Cure Wounds|Массовое лечение ран
+Mislead|Обманчивый двойник
+Modify Memory|Изменение памяти
+Planar Binding|Планарные узы
+Scrying|Наблюдение
+Seeming|Мнимый облик
+Teleportation Circle|Круг телепортации
+Commune|Общение с божеством
+Contagion|Заражение
+Dispel Evil and Good|Рассеивание добра и зла
+Flame Strike|Небесный огонь
+Hallow|Освящение
+Insect Plague|Нашествие насекомых
+Antilife Shell|Барьер против жизни
+Commune with Nature|Единение с природой
+Conjure Elemental|Призыв элементаля
+Reincarnate|Перевоплощение
+Tree Stride|Перемещение через деревья
+Wall of Stone|Стена камня
+Cloudkill|Убийственное облако
+Creation|Сотворение
+Telekinesis|Телекинез
+Contact Other Plane|Контакт с иным планом
+Arcane Hand|Волшебная рука арканиста
+Passwall|Проход сквозь стену
+Telepathic Bond|Телепатическая связь
+Wall of Force|Силовая стена
+Eyebite|Пугающий взгляд
+Find the Path|Поиск пути
+Guards and Wards|Стражи и охранные чары
+Irresistible Dance|Неудержимая пляска
+Mass Suggestion|Массовое внушение
+Programmed Illusion|Программируемая иллюзия
+True Seeing|Истинное зрение
+Blade Barrier|Преграда из клинков
+Create Undead|Создание нежити
+Forbiddance|Запрет
+Harm|Вред
+Heroes’ Feast|Пир героев
+Planar Ally|Планарный союзник
+Word of Recall|Слово возврата
+Conjure Fey|Призыв феи
+Move Earth|Движение земли
+Sunbeam|Солнечный луч
+Transport via Plants|Перемещение через растения
+Wall of Thorns|Стена шипов
+Wind Walk|Хождение по ветру
+Circle of Death|Круг смерти
+Globe of Invulnerability|Сфера неуязвимости
+Flesh to Stone|Плоть в камень
+Contingency|Заготовленное заклинание
+Freezing Sphere|Морозная сфера
+Instant Summons|Мгновенный призыв
+Magic Jar|Магический сосуд
+Wall of Ice|Стена льда
+Arcane Sword|Волшебный меч
+Etherealness|Эфирность
+Forcecage|Силовая клетка
+Magnificent Mansion|Великолепный особняк
+Mirage Arcane|Волшебный мираж
+Project Image|Проекция образа
+Regenerate|Регенерация
+Symbol|Символ
+Conjure Celestial|Призыв небожителя
+Divine Word|Божественное слово
+Fire Storm|Огненная буря
+Plane Shift|Переход между планами
+Reverse Gravity|Обратная гравитация
+Delayed Blast Fireball|Отложенный огненный шар
+Finger of Death|Перст смерти
+Prismatic Spray|Радужные брызги
+Sequester|Сокрытие
+Simulacrum|Подобие
+Feeblemind|Слабоумие
+Glibness|Красноречие
+Mind Blank|Пустой разум
+Power Word Stun|Слово силы: оглушение
+Control Weather|Управление погодой
+Earthquake|Землетрясение
+Holy Aura|Священная аура
+Animal Shapes|Обличья животных
+Antipathy/Sympathy|Антипатия или симпатия
+Sunburst|Солнечный взрыв
+Incendiary Cloud|Огненное облако
+Demiplane|Демиплан
+Clone|Клон
+Maze|Лабиринт
+Foresight|Предвидение
+True Polymorph|Истинное превращение
+Astral Projection|Астральная проекция
+Gate|Врата
+Mass Heal|Массовое исцеление
+True Resurrection|Истинное воскрешение
+Shapechange|Смена облика
+Storm of Vengeance|Буря мести
+Meteor Swarm|Метеоритный дождь
+Time Stop|Остановка времени
+Imprisonment|Заточение
+Prismatic Wall|Радужная стена
+Weird|Ужас
+Vicious Mockery|Злая насмешка

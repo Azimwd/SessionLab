@@ -1,0 +1,5 @@
+export const abilities: Record<string, string> = {str:'Сила',dex:'Ловкость',con:'Телосложение',int:'Интеллект',wis:'Мудрость',cha:'Харизма'};
+export const skills: Record<string, [string, string]> = {acrobatics:['Акробатика','dex'],animal_handling:['Уход за животными','wis'],arcana:['Магия','int'],athletics:['Атлетика','str'],deception:['Обман','cha'],history:['История','int'],insight:['Проницательность','wis'],intimidation:['Запугивание','cha'],investigation:['Анализ','int'],medicine:['Медицина','wis'],nature:['Природа','int'],perception:['Внимательность','wis'],performance:['Выступление','cha'],persuasion:['Убеждение','cha'],religion:['Религия','int'],sleight_of_hand:['Ловкость рук','dex'],stealth:['Скрытность','dex'],survival:['Выживание','wis']};
+export const conditions = ['Ослеплён','Очарован','Оглох','Испуган','Схвачен','Недееспособен','Невидим','Парализован','Окаменел','Отравлен','Сбит с ног','Опутан','Ошеломлён','Без сознания','Концентрация'];
+export const signed = (n: number) => n >= 0 ? `+${n}` : String(n);
+export const modifier = (n: number) => Math.floor((n - 10) / 2);

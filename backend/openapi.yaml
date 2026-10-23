@@ -1,0 +1,5178 @@
+openapi: 3.0.3
+info:
+  title: SessionLab API
+  version: 1.0.0
+  description: Server-authoritative campaign tools. Unsafe requests require CSRF.
+    Game mutations require Idempotency-Key. All responses use {data,error}.
+paths:
+  /api/abilities/{id}/:
+    patch:
+      operationId: abilities_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - abilities
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAbilityUpdateRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAbilityUpdateRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAbilityUpdateRequestRequest'
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Ability'
+                  error:
+                    nullable: true
+          description: ''
+  /api/abilities/{id}/use/:
+    post:
+      operationId: abilities_use_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - abilities
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Event'
+                  error:
+                    nullable: true
+          description: ''
+  /api/active-effects/{id}/{verb}/:
+    post:
+      operationId: active_effects_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: verb
+        schema:
+          type: string
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - active-effects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Roll'
+                  error:
+                    nullable: true
+          description: ''
+  /api/auth/csrf/:
+    get:
+      operationId: auth_csrf_retrieve
+      tags:
+      - auth
+      security:
+      - SessionCookie: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  error:
+                    nullable: true
+          description: ''
+      parameters: []
+  /api/auth/login/:
+    post:
+      operationId: auth_login_create
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CredentialsRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CredentialsRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CredentialsRequest'
+        required: true
+      security:
+      - SessionCookie: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/User'
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+  /api/auth/logout/:
+    post:
+      operationId: auth_logout_create
+      tags:
+      - auth
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+  /api/auth/me/:
+    get:
+      operationId: auth_me_retrieve
+      tags:
+      - auth
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/User'
+                  error:
+                    nullable: true
+          description: ''
+      parameters: []
+    patch:
+      operationId: auth_me_partial_update
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedUserRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedUserRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedUserRequest'
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/User'
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+  /api/auth/register/:
+    post:
+      operationId: auth_register_create
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CredentialsRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CredentialsRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CredentialsRequest'
+        required: true
+      security:
+      - SessionCookie: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/User'
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+  /api/campaigns/:
+    get:
+      operationId: campaigns_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - campaigns
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PaginatedCampaignList'
+                  error:
+                    nullable: true
+          description: ''
+    post:
+      operationId: campaigns_create
+      tags:
+      - campaigns
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CampaignRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CampaignRequest'
+        required: true
+      security:
+      - SessionCookie: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Campaign'
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+  /api/campaigns/{id}/:
+    get:
+      operationId: campaigns_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this campaign.
+        required: true
+      tags:
+      - campaigns
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Campaign'
+                  error:
+                    nullable: true
+          description: ''
+    patch:
+      operationId: campaigns_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this campaign.
+        required: true
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - campaigns
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedCampaignRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedCampaignRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedCampaignRequest'
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Campaign'
+                  error:
+                    nullable: true
+          description: ''
+  /api/campaigns/{id}/members/:
+    get:
+      operationId: campaigns_members_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this campaign.
+        required: true
+      tags:
+      - campaigns
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Campaign'
+                  error:
+                    nullable: true
+          description: ''
+  /api/campaigns/{id}/sessions/:
+    get:
+      operationId: campaigns_sessions_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this campaign.
+        required: true
+      tags:
+      - campaigns
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Campaign'
+                  error:
+                    nullable: true
+          description: ''
+    post:
+      operationId: campaigns_sessions_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this campaign.
+        required: true
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - campaigns
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CampaignRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CampaignRequest'
+        required: true
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Campaign'
+                  error:
+                    nullable: true
+          description: ''
+  /api/campaigns/join/:
+    post:
+      operationId: campaigns_join_create
+      tags:
+      - campaigns
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CampaignRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CampaignRequest'
+        required: true
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Campaign'
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+  /api/casino/{game}/rounds/:
+    post:
+      operationId: casino_rounds_create
+      parameters:
+      - in: path
+        name: game
+        schema:
+          type: string
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - casino
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  error:
+                    nullable: true
+          description: ''
+  /api/casino/games/:
+    get:
+      operationId: casino_games_retrieve
+      tags:
+      - casino
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+  /api/casino/rounds/:
+    get:
+      operationId: casino_rounds_retrieve
+      tags:
+      - casino
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+  /api/casino/rounds/{id}/actions/:
+    post:
+      operationId: casino_rounds_actions_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - casino
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  error:
+                    nullable: true
+          description: ''
+  /api/casino/stats/:
+    get:
+      operationId: casino_stats_retrieve
+      tags:
+      - casino
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+  /api/casino/transactions/:
+    get:
+      operationId: casino_transactions_list
+      parameters:
+      - in: query
+        name: kind
+        schema:
+          type: string
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      tags:
+      - casino
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PaginatedTransactionList'
+                  error:
+                    nullable: true
+          description: ''
+  /api/casino/transactions/{id}/:
+    get:
+      operationId: casino_transactions_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this wallet transaction.
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      tags:
+      - casino
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Transaction'
+                  error:
+                    nullable: true
+          description: ''
+  /api/casino/wallet/:
+    get:
+      operationId: casino_wallet_retrieve
+      tags:
+      - casino
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+  /api/characters/:
+    get:
+      operationId: characters_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      tags:
+      - characters
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PaginatedCharacterList'
+                  error:
+                    nullable: true
+          description: ''
+    post:
+      operationId: characters_create
+      tags:
+      - characters
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CharacterRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CharacterRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CharacterRequest'
+        required: true
+      security:
+      - SessionCookie: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Character'
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+  /api/characters/{id}/:
+    get:
+      operationId: characters_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this character.
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      tags:
+      - characters
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Character'
+                  error:
+                    nullable: true
+          description: ''
+    patch:
+      operationId: characters_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this character.
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - characters
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedCharacterRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedCharacterRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedCharacterRequest'
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Character'
+                  error:
+                    nullable: true
+          description: ''
+  /api/characters/{id}/abilities/:
+    get:
+      operationId: characters_abilities_list
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      tags:
+      - characters
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Ability'
+                  error:
+                    nullable: true
+          description: ''
+    post:
+      operationId: characters_abilities_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - characters
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AbilityRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AbilityRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AbilityRequest'
+        required: true
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Ability'
+                  error:
+                    nullable: true
+          description: ''
+  /api/characters/{id}/resources/:
+    post:
+      operationId: characters_resources_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - characters
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Sheet'
+                  error:
+                    nullable: true
+          description: ''
+  /api/characters/{id}/sheet/:
+    get:
+      operationId: characters_sheet_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      tags:
+      - characters
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Sheet'
+                  error:
+                    nullable: true
+          description: ''
+    patch:
+      operationId: characters_sheet_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - characters
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSheetUpdateRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSheetUpdateRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSheetUpdateRequestRequest'
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Sheet'
+                  error:
+                    nullable: true
+          description: ''
+  /api/dm/actions/{kind}/{id}/:
+    post:
+      operationId: dm_actions_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: kind
+        schema:
+          type: string
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - dm
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  error:
+                    nullable: true
+          description: ''
+  /api/dm/config/{game}/:
+    patch:
+      operationId: dm_config_partial_update
+      parameters:
+      - in: path
+        name: game
+        schema:
+          type: string
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - dm
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedConfigRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedConfigRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedConfigRequest'
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Config'
+                  error:
+                    nullable: true
+          description: ''
+  /api/dm/effects/:
+    get:
+      operationId: dm_effects_list
+      parameters:
+      - in: query
+        name: active
+        schema:
+          type: boolean
+      - in: query
+        name: archived
+        schema:
+          type: boolean
+      - in: query
+        name: category
+        schema:
+          type: string
+          enum:
+          - complication
+          - gift
+          - paradox
+        description: |-
+          * `gift` - Дар
+          * `complication` - Осложнение
+          * `paradox` - Парадокс
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      tags:
+      - dm
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PaginatedEffectList'
+                  error:
+                    nullable: true
+          description: ''
+    post:
+      operationId: dm_effects_create
+      tags:
+      - dm
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EffectRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EffectRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EffectRequest'
+        required: true
+      security:
+      - SessionCookie: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Effect'
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+  /api/dm/effects/{id}/:
+    get:
+      operationId: dm_effects_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this effect definition.
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      tags:
+      - dm
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Effect'
+                  error:
+                    nullable: true
+          description: ''
+    patch:
+      operationId: dm_effects_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this effect definition.
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - dm
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedEffectRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedEffectRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedEffectRequest'
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Effect'
+                  error:
+                    nullable: true
+          description: ''
+    delete:
+      operationId: dm_effects_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this effect definition.
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - dm
+      security:
+      - SessionCookie: []
+      responses:
+        '204':
+          description: No response body
+  /api/dm/effects/{id}/copy/:
+    post:
+      operationId: dm_effects_copy_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this effect definition.
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - dm
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EffectRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EffectRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EffectRequest'
+        required: true
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Effect'
+                  error:
+                    nullable: true
+          description: ''
+  /api/dm/effects/export/:
+    get:
+      operationId: dm_effects_export_retrieve
+      tags:
+      - dm
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Effect'
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+  /api/dm/effects/import/:
+    post:
+      operationId: dm_effects_import_create
+      tags:
+      - dm
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EffectRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EffectRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EffectRequest'
+        required: true
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Effect'
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+  /api/dm/history/{kind}/:
+    get:
+      operationId: dm_history_retrieve
+      parameters:
+      - in: path
+        name: kind
+        schema:
+          type: string
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      tags:
+      - dm
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  error:
+                    nullable: true
+          description: ''
+  /api/dm/overview/:
+    get:
+      operationId: dm_overview_retrieve
+      tags:
+      - dm
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+  /api/dm/pools/:
+    get:
+      operationId: dm_pools_list
+      tags:
+      - dm
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Pool'
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+    post:
+      operationId: dm_pools_create
+      tags:
+      - dm
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Pool'
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+  /api/dm/quests/:
+    get:
+      operationId: dm_quests_list
+      parameters:
+      - in: query
+        name: active
+        schema:
+          type: boolean
+      - in: query
+        name: archived
+        schema:
+          type: boolean
+      - in: query
+        name: category
+        schema:
+          type: string
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      tags:
+      - dm
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PaginatedQuestList'
+                  error:
+                    nullable: true
+          description: ''
+    post:
+      operationId: dm_quests_create
+      tags:
+      - dm
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/QuestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/QuestRequest'
+        required: true
+      security:
+      - SessionCookie: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Quest'
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+  /api/dm/quests/{id}/:
+    get:
+      operationId: dm_quests_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this quest definition.
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      tags:
+      - dm
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Quest'
+                  error:
+                    nullable: true
+          description: ''
+    patch:
+      operationId: dm_quests_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this quest definition.
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - dm
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedQuestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedQuestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedQuestRequest'
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Quest'
+                  error:
+                    nullable: true
+          description: ''
+    delete:
+      operationId: dm_quests_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this quest definition.
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - dm
+      security:
+      - SessionCookie: []
+      responses:
+        '204':
+          description: No response body
+  /api/dm/quests/{id}/copy/:
+    post:
+      operationId: dm_quests_copy_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this quest definition.
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - dm
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/QuestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/QuestRequest'
+        required: true
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Quest'
+                  error:
+                    nullable: true
+          description: ''
+  /api/dm/quests/export/:
+    get:
+      operationId: dm_quests_export_retrieve
+      tags:
+      - dm
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Quest'
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+  /api/dm/quests/import/:
+    post:
+      operationId: dm_quests_import_create
+      tags:
+      - dm
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/QuestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/QuestRequest'
+        required: true
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Quest'
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+  /api/effects/:
+    get:
+      operationId: effects_list
+      parameters:
+      - in: query
+        name: category
+        schema:
+          type: string
+          enum:
+          - complication
+          - gift
+          - paradox
+        description: |-
+          * `gift` - Дар
+          * `complication` - Осложнение
+          * `paradox` - Парадокс
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: rarity
+        schema:
+          type: string
+          enum:
+          - common
+          - epic
+          - rare
+          - special
+          - uncommon
+        description: |-
+          * `common` - common
+          * `uncommon` - uncommon
+          * `rare` - rare
+          * `epic` - epic
+          * `special` - special
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      tags:
+      - effects
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PaginatedEffectList'
+                  error:
+                    nullable: true
+          description: ''
+  /api/effects/{id}/:
+    get:
+      operationId: effects_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this effect definition.
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      tags:
+      - effects
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Effect'
+                  error:
+                    nullable: true
+          description: ''
+  /api/exchanges/:
+    get:
+      operationId: exchanges_retrieve
+      tags:
+      - exchanges
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+    post:
+      operationId: exchanges_create
+      tags:
+      - exchanges
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+  /api/exchanges/{id}/consent/:
+    post:
+      operationId: exchanges_consent_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - exchanges
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  error:
+                    nullable: true
+          description: ''
+  /api/feed/:
+    get:
+      operationId: feed_retrieve
+      tags:
+      - feed
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+  /api/history/{module}/:
+    get:
+      operationId: history_retrieve
+      parameters:
+      - in: path
+        name: module
+        schema:
+          type: string
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      tags:
+      - history
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  error:
+                    nullable: true
+          description: ''
+  /api/quest-assignments/{id}/submit/:
+    post:
+      operationId: quest_assignments_submit_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - quest-assignments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Assignment'
+                  error:
+                    nullable: true
+          description: ''
+  /api/quests/:
+    get:
+      operationId: quests_list
+      parameters:
+      - in: query
+        name: category
+        schema:
+          type: string
+      - in: query
+        name: difficulty
+        schema:
+          type: string
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      tags:
+      - quests
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PaginatedQuestList'
+                  error:
+                    nullable: true
+          description: ''
+  /api/quests/{id}/:
+    get:
+      operationId: quests_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this quest definition.
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      tags:
+      - quests
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Quest'
+                  error:
+                    nullable: true
+          description: ''
+  /api/room/:
+    get:
+      operationId: room_retrieve
+      tags:
+      - room
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+  /api/room/events/:
+    get:
+      operationId: room_events_list
+      tags:
+      - room
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Event'
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+  /api/room/initiative/:
+    post:
+      operationId: room_initiative_create
+      tags:
+      - room
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+  /api/room/rolls/:
+    post:
+      operationId: room_rolls_create
+      tags:
+      - room
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Event'
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+  /api/schema/:
+    get:
+      operationId: schema_retrieve
+      description: |-
+        OpenApi3 schema for this API. Format can be selected via content negotiation.
+
+        - YAML: application/vnd.oai.openapi
+        - JSON: application/vnd.oai.openapi+json
+      parameters:
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - json
+          - yaml
+      - in: query
+        name: lang
+        schema:
+          type: string
+          enum:
+          - af
+          - ar
+          - ar-dz
+          - ast
+          - az
+          - be
+          - bg
+          - bn
+          - br
+          - bs
+          - ca
+          - ckb
+          - cs
+          - cy
+          - da
+          - de
+          - dsb
+          - el
+          - en
+          - en-au
+          - en-gb
+          - eo
+          - es
+          - es-ar
+          - es-co
+          - es-mx
+          - es-ni
+          - es-ve
+          - et
+          - eu
+          - fa
+          - fi
+          - fr
+          - fy
+          - ga
+          - gd
+          - gl
+          - he
+          - hi
+          - hr
+          - hsb
+          - hu
+          - hy
+          - ia
+          - id
+          - ig
+          - io
+          - is
+          - it
+          - ja
+          - ka
+          - kab
+          - kk
+          - km
+          - kn
+          - ko
+          - ky
+          - lb
+          - lt
+          - lv
+          - mk
+          - ml
+          - mn
+          - mr
+          - ms
+          - my
+          - nb
+          - ne
+          - nl
+          - nn
+          - os
+          - pa
+          - pl
+          - pt
+          - pt-br
+          - ro
+          - ru
+          - sk
+          - sl
+          - sq
+          - sr
+          - sr-latn
+          - sv
+          - sw
+          - ta
+          - te
+          - tg
+          - th
+          - tk
+          - tr
+          - tt
+          - udm
+          - ug
+          - uk
+          - ur
+          - uz
+          - vi
+          - zh-hans
+          - zh-hant
+      tags:
+      - schema
+      security:
+      - SessionCookie: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/vnd.oai.openapi:
+              schema:
+                type: object
+                additionalProperties: {}
+            application/yaml:
+              schema:
+                type: object
+                additionalProperties: {}
+            application/vnd.oai.openapi+json:
+              schema:
+                type: object
+                additionalProperties: {}
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  error:
+                    nullable: true
+          description: ''
+  /api/sessions/{id}/:
+    patch:
+      operationId: sessions_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this game session.
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - sessions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSessionRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSessionRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSessionRequest'
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Session'
+                  error:
+                    nullable: true
+          description: ''
+  /api/sessions/{id}/{module}/my/:
+    get:
+      operationId: sessions_my_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: module
+        schema:
+          type: string
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      tags:
+      - sessions
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  error:
+                    nullable: true
+          description: ''
+    post:
+      operationId: sessions_my_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: module
+        schema:
+          type: string
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - sessions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  error:
+                    nullable: true
+          description: ''
+  /api/sessions/{id}/{module}/roll/:
+    get:
+      operationId: sessions_roll_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: module
+        schema:
+          type: string
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      tags:
+      - sessions
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  error:
+                    nullable: true
+          description: ''
+    post:
+      operationId: sessions_roll_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: module
+        schema:
+          type: string
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - sessions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  error:
+                    nullable: true
+          description: ''
+  /api/sessions/{id}/finish/:
+    post:
+      operationId: sessions_finish_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this game session.
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - sessions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SessionRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SessionRequest'
+        required: true
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Session'
+                  error:
+                    nullable: true
+          description: ''
+  /api/sessions/{id}/start/:
+    post:
+      operationId: sessions_start_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this game session.
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - sessions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SessionRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SessionRequest'
+        required: true
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Session'
+                  error:
+                    nullable: true
+          description: ''
+  /api/campaigns/{id}/stream/:
+    get:
+      operationId: campaigns_stream
+      summary: Committed room changes via Server-Sent Events
+      description: 'Authenticated campaign members only. Events: change with {revision},
+        revoked with {}. No private game content is streamed. Re-fetch scoped REST
+        resources after change. Heartbeat every second; reconnect after the bounded
+        stream ends.'
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: integer
+      - in: header
+        name: Last-Event-ID
+        required: false
+        schema:
+          type: integer
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          description: SSE event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '403':
+          description: Session expired or campaign access denied
+components:
+  schemas:
+    Ability:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        version:
+          type: integer
+          readOnly: true
+        kind:
+          $ref: '#/components/schemas/KindEnum'
+        name:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+        ability:
+          type: string
+          maxLength: 3
+        proficient:
+          type: boolean
+        bonus:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        resolution:
+          $ref: '#/components/schemas/ResolutionEnum'
+        dice:
+          type: string
+          maxLength: 80
+        add_modifier:
+          type: boolean
+        damage_type:
+          type: string
+          maxLength: 50
+        level:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        upcast_dice:
+          type: string
+          maxLength: 80
+        roll_count:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        upcast_count:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        cantrip_scaling:
+          type: boolean
+        save_ability:
+          type: string
+          maxLength: 3
+        casting_time:
+          type: string
+          maxLength: 80
+        range:
+          type: string
+          maxLength: 80
+        duration:
+          type: string
+          maxLength: 80
+        concentration:
+          type: boolean
+        active:
+          type: boolean
+        character:
+          type: integer
+          readOnly: true
+      required:
+      - character
+      - id
+      - kind
+      - name
+      - version
+    AbilityRequest:
+      type: object
+      properties:
+        kind:
+          $ref: '#/components/schemas/KindEnum'
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+        ability:
+          type: string
+          minLength: 1
+          maxLength: 3
+        proficient:
+          type: boolean
+        bonus:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        resolution:
+          $ref: '#/components/schemas/ResolutionEnum'
+        dice:
+          type: string
+          maxLength: 80
+        add_modifier:
+          type: boolean
+        damage_type:
+          type: string
+          maxLength: 50
+        level:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        upcast_dice:
+          type: string
+          maxLength: 80
+        roll_count:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        upcast_count:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        cantrip_scaling:
+          type: boolean
+        save_ability:
+          type: string
+          minLength: 1
+          maxLength: 3
+        casting_time:
+          type: string
+          minLength: 1
+          maxLength: 80
+        range:
+          type: string
+          maxLength: 80
+        duration:
+          type: string
+          maxLength: 80
+        concentration:
+          type: boolean
+        active:
+          type: boolean
+      required:
+      - kind
+      - name
+    Assignment:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        character_name:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        snapshot: {}
+        status:
+          type: string
+          maxLength: 24
+        evidence:
+          type: string
+        decision_note:
+          type: string
+        session:
+          type: integer
+        character:
+          type: integer
+        definition:
+          type: integer
+        decided_by:
+          type: integer
+          nullable: true
+      required:
+      - character
+      - character_name
+      - created_at
+      - definition
+      - id
+      - session
+      - snapshot
+      - updated_at
+    Campaign:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        description:
+          type: string
+        owner:
+          type: integer
+          readOnly: true
+        settings: {}
+        invite_code:
+          type: string
+          readOnly: true
+        role:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - invite_code
+      - name
+      - owner
+      - role
+    CampaignRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        description:
+          type: string
+        settings: {}
+      required:
+      - name
+    CategoryEnum:
+      enum:
+      - gift
+      - complication
+      - paradox
+      type: string
+      description: |-
+        * `gift` - Дар
+        * `complication` - Осложнение
+        * `paradox` - Парадокс
+    Character:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        campaign:
+          type: integer
+          readOnly: true
+        owner:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        character_class:
+          type: string
+          maxLength: 60
+        level:
+          type: integer
+          maximum: 30
+          minimum: 1
+        species:
+          type: string
+          maxLength: 60
+        description:
+          type: string
+        avatar:
+          type: string
+          format: uri
+          maxLength: 200
+        active:
+          type: boolean
+      required:
+      - campaign
+      - id
+      - name
+      - owner
+    CharacterRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        character_class:
+          type: string
+          maxLength: 60
+        level:
+          type: integer
+          maximum: 30
+          minimum: 1
+        species:
+          type: string
+          maxLength: 60
+        description:
+          type: string
+        avatar:
+          type: string
+          format: uri
+          maxLength: 200
+        active:
+          type: boolean
+      required:
+      - name
+    Config:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        game:
+          type: string
+          readOnly: true
+        enabled:
+          type: boolean
+        min_bet:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        max_bet:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        rules: {}
+        version:
+          type: integer
+          readOnly: true
+      required:
+      - game
+      - id
+      - version
+    CredentialsRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+          maxLength: 254
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+          maxLength: 4096
+        first_name:
+          type: string
+          minLength: 1
+          maxLength: 80
+      required:
+      - email
+      - password
+    Effect:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        code:
+          type: string
+          maxLength: 80
+        title:
+          type: string
+          maxLength: 160
+        summary:
+          type: string
+          maxLength: 300
+        description:
+          type: string
+        mechanic:
+          type: string
+        secret:
+          type: string
+        category:
+          $ref: '#/components/schemas/CategoryEnum'
+        rarity:
+          $ref: '#/components/schemas/RarityEnum'
+        weight:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        duration:
+          type: string
+          maxLength: 80
+        use_limit:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        activation:
+          type: string
+        requires_approval:
+          type: boolean
+        mechanic_type:
+          type: string
+          maxLength: 40
+        parameters: {}
+        color:
+          type: string
+          maxLength: 20
+        icon:
+          type: string
+          maxLength: 40
+        animation:
+          type: string
+          maxLength: 40
+        homebrew:
+          type: boolean
+        active:
+          type: boolean
+        archived:
+          type: boolean
+        campaign:
+          type: integer
+          readOnly: true
+          nullable: true
+      required:
+      - campaign
+      - category
+      - code
+      - created_at
+      - description
+      - id
+      - title
+      - updated_at
+    EffectRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 80
+        title:
+          type: string
+          minLength: 1
+          maxLength: 160
+        summary:
+          type: string
+          maxLength: 300
+        description:
+          type: string
+          minLength: 1
+        mechanic:
+          type: string
+        secret:
+          type: string
+        category:
+          $ref: '#/components/schemas/CategoryEnum'
+        rarity:
+          $ref: '#/components/schemas/RarityEnum'
+        weight:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        duration:
+          type: string
+          minLength: 1
+          maxLength: 80
+        use_limit:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        activation:
+          type: string
+        requires_approval:
+          type: boolean
+        mechanic_type:
+          type: string
+          minLength: 1
+          maxLength: 40
+        parameters: {}
+        color:
+          type: string
+          minLength: 1
+          maxLength: 20
+        icon:
+          type: string
+          minLength: 1
+          maxLength: 40
+        animation:
+          type: string
+          minLength: 1
+          maxLength: 40
+        homebrew:
+          type: boolean
+        active:
+          type: boolean
+        archived:
+          type: boolean
+      required:
+      - category
+      - code
+      - description
+      - title
+    Event:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        session:
+          type: integer
+        character:
+          type: integer
+          nullable: true
+        kind:
+          type: string
+          maxLength: 30
+        visibility:
+          type: string
+          maxLength: 10
+        payload: {}
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        actor_name:
+          type: string
+          readOnly: true
+      required:
+      - actor_name
+      - created_at
+      - id
+      - kind
+      - session
+    KindEnum:
+      enum:
+      - attack
+      - spell
+      type: string
+      description: |-
+        * `attack` - Attack
+        * `spell` - Spell
+    PaginatedCampaignList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Campaign'
+    PaginatedCharacterList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Character'
+    PaginatedEffectList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Effect'
+    PaginatedQuestList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Quest'
+    PaginatedTransactionList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transaction'
+    PatchedAbilityUpdateRequestRequest:
+      type: object
+      properties:
+        version:
+          type: integer
+          minimum: 1
+          description: Current server version; stale values return HTTP 409.
+        kind:
+          $ref: '#/components/schemas/KindEnum'
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+        ability:
+          type: string
+          minLength: 1
+          maxLength: 3
+        proficient:
+          type: boolean
+        bonus:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        resolution:
+          $ref: '#/components/schemas/ResolutionEnum'
+        dice:
+          type: string
+          maxLength: 80
+        add_modifier:
+          type: boolean
+        damage_type:
+          type: string
+          maxLength: 50
+        level:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        upcast_dice:
+          type: string
+          maxLength: 80
+        roll_count:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        upcast_count:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        cantrip_scaling:
+          type: boolean
+        save_ability:
+          type: string
+          minLength: 1
+          maxLength: 3
+        casting_time:
+          type: string
+          minLength: 1
+          maxLength: 80
+        range:
+          type: string
+          maxLength: 80
+        duration:
+          type: string
+          maxLength: 80
+        concentration:
+          type: boolean
+        active:
+          type: boolean
+    PatchedCampaignRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        description:
+          type: string
+        settings: {}
+    PatchedCharacterRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        character_class:
+          type: string
+          maxLength: 60
+        level:
+          type: integer
+          maximum: 30
+          minimum: 1
+        species:
+          type: string
+          maxLength: 60
+        description:
+          type: string
+        avatar:
+          type: string
+          format: uri
+          maxLength: 200
+        active:
+          type: boolean
+    PatchedConfigRequest:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        min_bet:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        max_bet:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        rules: {}
+    PatchedEffectRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 80
+        title:
+          type: string
+          minLength: 1
+          maxLength: 160
+        summary:
+          type: string
+          maxLength: 300
+        description:
+          type: string
+          minLength: 1
+        mechanic:
+          type: string
+        secret:
+          type: string
+        category:
+          $ref: '#/components/schemas/CategoryEnum'
+        rarity:
+          $ref: '#/components/schemas/RarityEnum'
+        weight:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        duration:
+          type: string
+          minLength: 1
+          maxLength: 80
+        use_limit:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        activation:
+          type: string
+        requires_approval:
+          type: boolean
+        mechanic_type:
+          type: string
+          minLength: 1
+          maxLength: 40
+        parameters: {}
+        color:
+          type: string
+          minLength: 1
+          maxLength: 20
+        icon:
+          type: string
+          minLength: 1
+          maxLength: 40
+        animation:
+          type: string
+          minLength: 1
+          maxLength: 40
+        homebrew:
+          type: boolean
+        active:
+          type: boolean
+        archived:
+          type: boolean
+    PatchedQuestRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 80
+        title:
+          type: string
+          minLength: 1
+          maxLength: 160
+        description:
+          type: string
+          minLength: 1
+        category:
+          type: string
+          minLength: 1
+          maxLength: 80
+        difficulty:
+          type: string
+          minLength: 1
+          maxLength: 20
+        reward:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        active:
+          type: boolean
+        archived:
+          type: boolean
+    PatchedSessionRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        date:
+          type: string
+          format: date-time
+          nullable: true
+        settings: {}
+    PatchedSheetUpdateRequestRequest:
+      type: object
+      properties:
+        version:
+          type: integer
+          minimum: 1
+          description: Current server version; stale values return HTTP 409.
+        abilities: {}
+        skills: {}
+        saves: {}
+        proficiency_override:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          nullable: true
+        armor_class:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        hp_max:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        hp_current:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        hp_temp:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        speed:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        initiative_bonus:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        spell_ability:
+          type: string
+          minLength: 1
+          maxLength: 3
+        slots: {}
+        conditions: {}
+        death_successes:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        death_failures:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        inventory:
+          type: string
+        notes:
+          type: string
+        background:
+          type: string
+    PatchedUserRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+          maxLength: 254
+        first_name:
+          type: string
+          title: Имя
+          maxLength: 150
+        theme:
+          type: string
+          minLength: 1
+          maxLength: 10
+        reduced_motion:
+          type: boolean
+    Pool:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        active:
+          type: boolean
+        entries:
+          type: array
+          items:
+            type: object
+            properties:
+              effect_id:
+                type: integer
+              weight:
+                type: integer
+          readOnly: true
+      required:
+      - entries
+      - id
+      - name
+    Quest:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        code:
+          type: string
+          maxLength: 80
+        title:
+          type: string
+          maxLength: 160
+        description:
+          type: string
+        category:
+          type: string
+          maxLength: 80
+        difficulty:
+          type: string
+          maxLength: 20
+        reward:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        active:
+          type: boolean
+        archived:
+          type: boolean
+        campaign:
+          type: integer
+          readOnly: true
+          nullable: true
+      required:
+      - campaign
+      - category
+      - code
+      - created_at
+      - description
+      - id
+      - title
+      - updated_at
+    QuestRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 80
+        title:
+          type: string
+          minLength: 1
+          maxLength: 160
+        description:
+          type: string
+          minLength: 1
+        category:
+          type: string
+          minLength: 1
+          maxLength: 80
+        difficulty:
+          type: string
+          minLength: 1
+          maxLength: 20
+        reward:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        active:
+          type: boolean
+        archived:
+          type: boolean
+      required:
+      - category
+      - code
+      - description
+      - title
+    RarityEnum:
+      enum:
+      - common
+      - uncommon
+      - rare
+      - epic
+      - special
+      type: string
+      description: |-
+        * `common` - common
+        * `uncommon` - uncommon
+        * `rare` - rare
+        * `epic` - epic
+        * `special` - special
+    ResolutionEnum:
+      enum:
+      - attack
+      - save
+      - automatic
+      type: string
+      description: |-
+        * `attack` - Attack
+        * `save` - Save
+        * `automatic` - Automatic
+    Roll:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        character_name:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        snapshot: {}
+        choices: {}
+        status:
+          type: string
+          maxLength: 24
+        uses:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        note:
+          type: string
+        bonus:
+          type: boolean
+        issued_to:
+          type: integer
+          nullable: true
+        session:
+          type: integer
+        character:
+          type: integer
+        definition:
+          type: integer
+          nullable: true
+      required:
+      - character
+      - character_name
+      - created_at
+      - id
+      - session
+      - updated_at
+    Session:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        campaign:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        date:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/StatusEnum'
+          readOnly: true
+        settings: {}
+      required:
+      - campaign
+      - id
+      - name
+      - status
+    SessionRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        date:
+          type: string
+          format: date-time
+          nullable: true
+        settings: {}
+      required:
+      - name
+    Sheet:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        computed:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        version:
+          type: integer
+          readOnly: true
+        abilities: {}
+        skills: {}
+        saves: {}
+        proficiency_override:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          nullable: true
+        armor_class:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        hp_max:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        hp_current:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        hp_temp:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        speed:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        initiative_bonus:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        spell_ability:
+          type: string
+          maxLength: 3
+        slots: {}
+        conditions: {}
+        death_successes:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        death_failures:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        inventory:
+          type: string
+        notes:
+          type: string
+        background:
+          type: string
+        character:
+          type: integer
+          readOnly: true
+      required:
+      - character
+      - computed
+      - id
+      - version
+    StatusEnum:
+      enum:
+      - planned
+      - active
+      - completed
+      type: string
+      description: |-
+        * `planned` - Planned
+        * `active` - Active
+        * `completed` - Completed
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,14}(?:\.\d{0,2})?$
+        balance_after:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,14}(?:\.\d{0,2})?$
+        kind:
+          type: string
+          maxLength: 24
+        note:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - amount
+      - balance_after
+      - created_at
+      - id
+      - kind
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        first_name:
+          type: string
+          title: Имя
+          maxLength: 150
+        theme:
+          type: string
+          maxLength: 10
+        reduced_motion:
+          type: boolean
+      required:
+      - email
+      - id
+  securitySchemes:
+    SessionCookie:
+      type: apiKey
+      in: cookie
+      name: sessionid
+      description: Django session; unsafe requests additionally require X-CSRFToken.

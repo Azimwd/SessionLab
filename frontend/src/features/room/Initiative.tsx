@@ -1,0 +1,28 @@
+import { useState } from 'react';
+import { useApp, useAction } from '../../app';
+import { Button, Badge, Field, Modal, Confirm } from '../../components/ui';
+import { Play, ArrowRight, Pause, Plus, RotateCcw, Eye, EyeOff, Trash2, Dice5 } from 'lucide-react';
+import type { Json } from '../../api/client';
+
+export default function Initiative({ tracker, party, master }: {tracker: Json;party: Json[];master: boolean}) {
+  const a = useApp();
+  const action = useAction('');
+  const [adding, setAdding] = useState(false), [reset, setReset] = useState(false);
+  const [who,setWho] = useState('npc');
+  const [editing,setEditing]=useState<Json|null>(null);
+  const send=(verb:string, extra:Json={})=>action.mutate({path:`/room/initiative/?campaign=${a.cid}`,body:{action:verb,version:tracker.version,...extra}});
+  return <section className="initiative-panel"><div className="section-title"><div><div className="eyebrow">ПОРЯДОК ХОДОВ</div><h2>Инициатива</h2></div><Badge tone={tracker.running?'green':''}>Раунд {tracker.round_number}</Badge></div>
+    {master ? <div className="actions initiative-controls">
+      <Button disabled={!a.sid || action.isPending || !tracker.entries.length} onClick={()=>send(tracker.running?'next':'start')}>{tracker.running?<ArrowRight size={16}/>:<Play size={16}/>} {tracker.running?'Следующий ход':tracker.round_number?'Продолжить':'Начать'}</Button>
+      {tracker.running && <Button variant="secondary" aria-label="Остановить инициативу" disabled={action.isPending} onClick={()=>send('stop')}><Pause size={16}/></Button>}
+      <Button variant="secondary" disabled={!a.sid || tracker.running} onClick={()=>setAdding(true)}><Plus size={16}/> Участник</Button>
+      <Button variant="ghost" aria-label="Сбросить инициативу" disabled={!a.sid || action.isPending} onClick={()=>setReset(true)}><RotateCcw size={16}/></Button>
+    </div>:<Button variant="secondary" disabled={!a.sid || !a.charId || action.isPending || tracker.running || tracker.entries.some((e:Json)=>String(e.character)===a.charId)} onClick={()=>action.mutate({path:`/room/rolls/?campaign=${a.cid}`,body:{character:Number(a.charId),kind:'initiative'}})}><Dice5 size={16}/> Бросить инициативу</Button>}
+    {tracker.hidden_turn && <p className="save-callout">Сейчас ход скрытого участника мастера.</p>}
+    <ol className="initiative-list">{tracker.entries.map((e:Json,index:number)=><li key={e.id} className={tracker.running && tracker.current===e.id?'current':''}><span className="turn-order">{tracker.running && tracker.current===e.id?<Play size={14}/>:index+1}</span><div><strong>{e.name}</strong><small>{e.character?'Персонаж':'NPC'}{e.hidden?' · скрыт от игроков':''}</small></div>{master && !tracker.running?<button className="initiative-score" aria-label={`Изменить инициативу: ${e.name}`} disabled={action.isPending} onClick={()=>setEditing(e)}>{e.initiative}</button>:<b className="initiative-score">{e.initiative}</b>}{master && !tracker.running && <><button title={e.hidden?'Показать игрокам':'Скрыть от игроков'} aria-label={`${e.hidden?'Показать':'Скрыть'} ${e.name}`} disabled={action.isPending} onClick={()=>send('edit',{entry:e.id,hidden:!e.hidden})}>{e.hidden?<EyeOff size={16}/>:<Eye size={16}/>}</button><button title="Удалить из инициативы" aria-label={`Убрать ${e.name}`} disabled={action.isPending} onClick={()=>send('remove',{entry:e.id})}><Trash2 size={16}/></button></>}</li>)}</ol>
+    {!tracker.entries.length && <p className="muted">Игроки бросают инициативу со своих листов. Мастер добавляет NPC и управляет ходами.</p>}
+    {adding && <Modal title="Участник инициативы" onClose={()=>setAdding(false)}><form onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);action.mutate({path:`/room/initiative/?campaign=${a.cid}`,body:{action:'add',version:tracker.version,character:who==='npc'?null:Number(who),name:f.get('name'),initiative:Number(f.get('initiative')),hidden:f.get('hidden')==='on'}},{onSuccess:()=>setAdding(false)});}}><Field label="Участник"><select value={who} onChange={e=>setWho(e.target.value)}><option value="npc">Новый NPC / противник</option>{party.filter(c=>!tracker.entries.some((e:Json)=>e.character===c.id)).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>{who==='npc' && <Field label="Имя"><input name="name" required maxLength={100}/></Field>}<Field label="Значение инициативы"><input name="initiative" type="number" defaultValue={10} min={-100} max={100} required/></Field><label className="check-line"><input name="hidden" type="checkbox"/>Скрыть от игроков</label><Button disabled={action.isPending}>Добавить</Button></form></Modal>}
+    {editing && <Modal title={`Инициатива: ${editing.name}`} onClose={()=>setEditing(null)}><form onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);action.mutate({path:`/room/initiative/?campaign=${a.cid}`,body:{action:'edit',version:tracker.version,entry:editing.id,initiative:Number(f.get('initiative'))}},{onSuccess:()=>setEditing(null)});}}><Field label="Значение инициативы"><input name="initiative" type="number" defaultValue={editing.initiative} min={-100} max={100} required/></Field><Button disabled={action.isPending}>Сохранить</Button></form></Modal>}
+    {reset && <Confirm title="Сбросить инициативу?" text="Участники и текущий раунд будут очищены. Сохранённые броски останутся в журнале." busy={action.isPending} onClose={()=>setReset(false)} onConfirm={()=>action.mutate({path:`/room/initiative/?campaign=${a.cid}`,body:{action:'reset',version:tracker.version}},{onSuccess:()=>setReset(false)})}/>}
+  </section>;
+}
