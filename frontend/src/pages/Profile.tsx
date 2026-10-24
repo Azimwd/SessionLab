@@ -140,10 +140,10 @@ export default function Profile() {
             <p>Ваше первое приключение начинается здесь.</p>
           )}
           <div className="actions">
-            <Button onClick={() => setModal("campaign")}>
+            {a.user.account_role === 'dm' && <Button onClick={() => setModal("campaign")}>
               <Plus size={16} />
               Создать
-            </Button>
+            </Button>}
             <Button variant="secondary" onClick={() => setModal("join")}>
               Присоединиться
             </Button>
@@ -166,7 +166,7 @@ export default function Profile() {
       </div>
       <div className="grid three">
         {a.characters
-          .filter((c) => c.owner === a.user.id)
+          .filter((c) => c.owner === a.user.id && c.kind !== 'npc')
           .map((c) => (
             <Card key={c.id}>
               <div className="card-heading">
@@ -200,7 +200,7 @@ export default function Profile() {
             </Card>
           ))}
       </div>
-      {!a.characters.some((c) => c.owner === a.user.id) && (
+      {!a.characters.some((c) => c.owner === a.user.id && c.kind !== 'npc') && (
         <Empty
           title="За каждой историей есть персонаж"
           text="Создайте персонажа и постепенно заполните его характеристики, атаки и заклинания."

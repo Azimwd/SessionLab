@@ -48,13 +48,13 @@ def campaign_for(request, pk=None, dm=False, lock=False):
     member = Membership.objects.filter(
         campaign=campaign, user=request.user, active=True
     ).first()
-    if not member or (dm and member.role != "dm"):
+    if not member or (dm and (member.role != "dm" or request.user.account_role != 'dm')):
         raise PermissionDenied("Недостаточно прав в этой кампании")
     return campaign
 
 
 def is_dm(campaign, user):
-    return Membership.objects.filter(
+    return user.account_role == 'dm' and Membership.objects.filter(
         campaign=campaign, user=user, active=True, role="dm"
     ).exists()
 

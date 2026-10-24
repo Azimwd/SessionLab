@@ -453,6 +453,78 @@ def test_catalog_add_and_protected_upcast(world):
     assert post(client(p), scoped(f'/api/abilities/{blocked.pk}/use/', c), {'slot_level': 2}).status_code == 400
 
 
+def test_every_srd_spell_has_russian_full_description_and_casting_facts(world):
+    from django.core.management import call_command
+    from lab.models import SpellCatalogEntry
+
+    call_command('seed_spells', verbosity=0)
+    spells = list(SpellCatalogEntry.objects.filter(active=True, code__startswith='srd51-'))
+    assert len(spells) == 319
+    assert sum(bool(spell.template['verified']) for spell in spells) == 15
+    for spell in spells:
+        rules = spell.template
+        assert rules['description_language'] == 'ru'
+        assert len(rules['description']) > 35
+        assert 'пока не проверены' not in rules['description']
+        assert all(rules[key] for key in ('casting_time', 'range', 'components', 'duration'))
+        assert rules['casting_time'] != 'Не проверено'
+    fireball = next(spell for spell in spells if spell.code == 'srd51-fireball')
+    wish = next(spell for spell in spells if spell.code == 'srd51-wish')
+    assert '8к6' in fireball.template['description']
+    assert '4-го уровня' in fireball.template['description']
+    assert '25 000' in wish.template['description']
+    assert wish.template['verified'] is False and wish.template['dice'] == ''
+    call_command('seed_spells', verbosity=0)
+    assert SpellCatalogEntry.objects.filter(active=True, code__startswith='srd51-').count() == 319
+
+
+def test_catalog_filters_all_pages_and_details(world):
+    dm, player, outsider, campaign, char, session = world
+    api = client(player)
+    base = scoped('/api/spells/catalog/', campaign)
+    result = api.get(base + '&class=Wizard&school=evocation&level=3&q=огненный')
+    assert result.status_code == 200
+    codes = [entry['code'] for entry in result.json()['data']['results']]
+    assert 'srd51-fireball' in codes
+    assert api.get(base + '&q=20-foot-radius').status_code == 200
+    assert api.get(base + '&q=Fireball&offset=300').json()['data']['count'] >= 1
+    assert api.get(base + '&class=Barbarian').status_code == 400
+    fireball = SpellCatalogEntry.objects.get(code='srd51-fireball')
+    detail = api.get(scoped(f'/api/spells/catalog/{fireball.pk}/', campaign))
+    assert detail.status_code == 200
+    assert '8d6 fire damage' in detail.json()['data']['rules']['source_en']
+    assert client(outsider).get(scoped(f'/api/spells/catalog/{fireball.pk}/', campaign)).status_code == 403
+
+
+def test_npc_sheet_and_initiative_hidden_from_player(world):
+    dm, player, outsider, campaign, char, session = world
+    dm_api, player_api = client(dm), client(player)
+    npc_url = scoped('/api/characters/', campaign)
+    assert post(player_api, npc_url, {'name':'Orc','kind':'npc','campaign':campaign.id}).status_code == 403
+    created = post(dm_api, npc_url, {'name':'Orc','kind':'npc','campaign':campaign.id})
+    assert created.status_code == 200
+    npc = Character.objects.get(pk=created.json()['data']['id'])
+    assert all(row['id'] != npc.pk for row in player_api.get(npc_url).json()['data']['results'])
+    assert dm_api.get(scoped(f'/api/characters/{npc.pk}/sheet/', campaign)).status_code == 200
+    roll = post(dm_api, scoped('/api/room/rolls/', campaign), {'character':npc.pk,'kind':'initiative'})
+    assert roll.status_code == 200
+    assert any(e['kind']=='npc' for e in dm_api.get(scoped('/api/room/',campaign)).json()['data']['initiative']['entries'])
+    assert dm_api.get(scoped('/api/room/',campaign)).json()['data']['npcs'][0]['id']==npc.id
+    assert player_api.get(scoped('/api/room/',campaign)).json()['data']['npcs']==[]
+
+
+def test_account_role_blocks_master_promotion(world):
+    dm, player, outsider, campaign, char, session = world
+    player.account_role='player'
+    player.save(update_fields=['account_role'])
+    member=Membership.objects.get(campaign=campaign,user=player)
+    url=scoped(f'/api/dm/actions/member/{member.id}/',campaign)
+    assert post(client(dm),url,{'role':'dm'}).status_code==400
+    member.role='dm'
+    member.save(update_fields=['role'])
+    assert client(player).get(scoped('/api/dm/overview/',campaign)).status_code==403
+
+
 def test_ray_of_frost_catalog_cantrip_scales_without_slot(world):
     from lab.models import SpellCatalogEntry
     dm, p, o, c, char, s = world

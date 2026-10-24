@@ -259,6 +259,8 @@ class DMAction(APIView):
                 if "role" in body:
                     if body["role"] not in ["dm", "player"]:
                         raise ValidationError("Неверная роль")
+                    if body['role'] == 'dm' and obj.user.account_role != 'dm':
+                        raise ValidationError('Аккаунт игрока нельзя назначить мастером')
                     obj.role = body["role"]
                 if "active" in body:
                     if type(body["active"]) is not bool:

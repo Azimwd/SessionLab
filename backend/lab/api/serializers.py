@@ -38,7 +38,8 @@ def validate_settings(value, partial=False):
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ["id", "email", "first_name", "theme", "reduced_motion"]
+        fields = ["id", "email", "first_name", "theme", "reduced_motion", "account_role"]
+        read_only_fields = ["account_role"]
 
     def validate_theme(self, v):
         if v not in ["light", "dark"]:
@@ -84,6 +85,7 @@ class CharacterSerializer(serializers.ModelSerializer):
             "id",
             "campaign",
             "owner",
+            "kind",
             "name",
             "character_class",
             "level",

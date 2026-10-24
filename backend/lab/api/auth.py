@@ -17,6 +17,7 @@ Credentials = inline_serializer(
         "email": serializers.EmailField(max_length=254),
         "password": serializers.CharField(write_only=True, max_length=4096),
         "first_name": serializers.CharField(required=False, max_length=80),
+        "account_role": serializers.ChoiceField(choices=['dm', 'player'], required=False),
     },
 )
 
@@ -44,6 +45,7 @@ class RegisterView(APIView):
             email=email,
             username="u_" + secrets.token_hex(24),
             first_name=data.get("first_name", ""),
+            account_role=data.get("account_role", "player"),
         )
         validate_password(data["password"], user)
         if User.objects.filter(email=email).exists():

@@ -7,7 +7,7 @@ from lab.api.campaigns import *
 from lab.api.play import *
 from lab.api.dm import *
 from lab.api.health import health
-from lab.api.sheets import SheetView, SheetResource, AbilitiesView, AbilityDetail, RollView, AbilityUse, SpellCatalogView, AddCatalogSpell
+from lab.api.sheets import SheetView, SheetResource, AbilitiesView, AbilityDetail, RollView, AbilityUse, SpellCatalogView, SpellCatalogDetail, AddCatalogSpell
 from lab.api.room import RoomView, RoomEvents, InitiativeView, room_stream
 
 router = DefaultRouter()
@@ -33,6 +33,7 @@ urlpatterns = [
     path("api/characters/<int:pk>/abilities/", AbilitiesView.as_view()),
     path("api/characters/<int:pk>/spells/catalog/", AddCatalogSpell.as_view()),
     path("api/spells/catalog/", SpellCatalogView.as_view()),
+    path("api/spells/catalog/<int:pk>/", SpellCatalogDetail.as_view()),
     path("api/abilities/<int:pk>/", AbilityDetail.as_view()),
     path("api/abilities/<int:pk>/use/", AbilityUse.as_view()),
     path("api/health/", health),

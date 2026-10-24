@@ -50,6 +50,7 @@ def tracker_data(tracker, dm=False):
         {
             "id": e.id,
             "character": e.character_id,
+            "kind": e.character.kind if e.character_id else 'npc',
             "name": e.name,
             "initiative": e.initiative,
             "hidden": e.hidden,
@@ -84,6 +85,7 @@ class RoomView(APIView):
         dm = is_dm(c, request.user) and request.query_params.get("view") != "player"
         s = c.sessions.filter(status="active").first()
         party = []
+        npcs = []
         for char in (
             Character.objects.filter(
                 campaign=c,
@@ -98,7 +100,7 @@ class RoomView(APIView):
                 sh = char.sheet
             except CharacterSheet.DoesNotExist:
                 sh = None
-            party.append(
+            (npcs if char.kind == 'npc' else party).append(
                 {
                     "id": char.id,
                     "name": char.name,
@@ -119,6 +121,7 @@ class RoomView(APIView):
                 "revision": revision(c.id),
                 "session": {"id": s.id, "name": s.name} if s else None,
                 "party": party,
+                "npcs": npcs if dm else [],
                 "initiative": tracker_data(tracker, dm),
                 "role": "dm" if is_dm(c, request.user) else "player",
             }

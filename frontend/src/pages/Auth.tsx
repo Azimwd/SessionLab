@@ -100,6 +100,14 @@ export default function Auth({ onSuccess }: { onSuccess: () => void }) {
             }}
           >
             {register && (
+              <Field label="Я буду">
+                <select name="account_role" defaultValue="player">
+                  <option value="player">Игроком · присоединяться к кампаниям</option>
+                  <option value="dm">Мастером · создавать кампании и играть</option>
+                </select>
+              </Field>
+            )}
+            {register && (
               <Field label="Как к вам обращаться">
                 <input
                   name="first_name"

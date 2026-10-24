@@ -21,6 +21,7 @@ def default_settings():
 
 class User(AbstractUser):
     email = models.EmailField(unique=True)
+    account_role = models.CharField(max_length=10, choices=[('dm', 'Master'), ('player', 'Player')], default='dm')
     theme = models.CharField(max_length=10, default="light")
     reduced_motion = models.BooleanField(default=False)
     USERNAME_FIELD = "email"
@@ -67,6 +68,7 @@ class Membership(Timestamped):
 class Character(Timestamped):
     campaign = models.ForeignKey(Campaign, on_delete=models.PROTECT)
     owner = models.ForeignKey(User, on_delete=models.PROTECT)
+    kind = models.CharField(max_length=10, choices=[('player', 'Player'), ('npc', 'NPC')], default='player')
     name = models.CharField(max_length=100)
     character_class = models.CharField(max_length=60, blank=True)
     level = models.PositiveSmallIntegerField(default=1)
@@ -441,7 +443,7 @@ class CharacterAbility(Timestamped):
     upcast_count = models.PositiveSmallIntegerField(default=0)
     cantrip_scaling = models.BooleanField(default=False)
     save_ability = models.CharField(max_length=3, default="dex")
-    casting_time = models.CharField(max_length=80, default="1 действие")
+    casting_time = models.CharField(max_length=255, default="1 действие")
     range = models.CharField(max_length=80, blank=True)
     duration = models.CharField(max_length=80, blank=True)
     concentration = models.BooleanField(default=False)

@@ -57,6 +57,8 @@ function mockTransport() {
       else if (url.startsWith('/room/')) data={revision:1,session:{id:1,name:'Первый шаг'},party:[],initiative:{version:0,running:false,round_number:0,current:null,entries:[]}};
       else if (url.startsWith('/characters/1/sheet/')) data={id:1,character:1,version:1,abilities:{str:16,dex:14,con:12,int:10,wis:10,cha:14},skills:{},saves:[],armor_class:14,hp_current:10,hp_max:15,hp_temp:0,speed:30,initiative_bonus:0,spell_ability:'cha',slots:Object.fromEntries(Array.from({length:9},(_,i)=>[String(i+1),{max:2,used:0}])),conditions:[],death_successes:0,death_failures:0,inventory:'',notes:'',background:'',computed:{proficiency:2,modifiers:{str:3,dex:2,con:1,int:0,wis:0,cha:2},skills:{},saves:{str:5,dex:2,con:1,int:0,wis:0,cha:4},initiative:2,spell_attack:4,spell_dc:12}};
       else if (url.startsWith('/characters/1/abilities/')) data=spellAvailable?[{id:9,version:1,kind:'spell',name:'Три искры',description:'Три отдельных луча',ability:'cha',proficient:true,bonus:0,resolution:'attack',dice:'1d6',add_modifier:false,damage_type:'огонь',level:1,upcast_dice:'',roll_count:3,upcast_count:0,save_ability:'dex',casting_time:'1 действие',range:'60 футов',duration:'Мгновенно',concentration:false}]:[];
+      else if (url.startsWith('/spells/catalog/5/')) data={id:5,name_ru:'Исполнение желаний',level:9,rules:{school:'conjuration',classes:['Wizard'],verified:false,casting_time:'Действие',range:'На себя',duration:'Мгновенная',components:'В',description:'Желание меняет реальность.\n\nМожно повторить заклинание.',source_en:'Wish is the mightiest spell.'}};
+      else if (url.startsWith('/spells/catalog/')) data={count:1,results:[{id:5,name_ru:'Огненный шар',name_en:'Fireball',level:3,rules:{school:'evocation',classes:['Wizard'],verified:true,casting_time:'1 действие',range:'150 футов',duration:'Мгновенно',description:'Взрыв огня'}}]};
       else if (url.startsWith('/abilities/9/use/')) data={id:100,kind:'ability',character:1,actor_name:'Мира',created_at:new Date().toISOString(),visibility:'public',payload:{label:'Три искры',character_name:'Мира',kind:'spell',slot_level:1,resolution:'attack',damage_type:'огонь',parts:[1,2,3].map(n=>({roll:{formula:'1d20+4',values:[n],chosen:n,modifier:4,total:n+4,mode:'normal'},damage:{formula:'1d6',terms:[{sign:1,sides:6,values:[n]}],total:n}})),total_damage:6}};
       else if (url.startsWith("/characters/"))
         data = {
@@ -181,19 +183,20 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 describe("Connected routes", () => {
-  it("loads dashboard with server campaign, character and wallet", async () => {
+  it("shows the complete Russian rules for a spell without automatic calculation", async () => {
+    mount('/spells/5');
+    await waitFor(()=>expect(screen.getByRole('heading', {name:'Исполнение желаний'})).toBeVisible());
+    expect(screen.getByText(/Желание меняет реальность/)).toBeVisible();
+    expect(screen.getByText(/Автоматический расчёт особых эффектов пока не настроен/)).toBeVisible();
+    expect(screen.getByText('Действие')).toBeVisible();
+    expect(screen.getByText('Оригинальный текст SRD 5.1 на английском')).toBeVisible();
+  });
+  it("loads campaign lobby and lets the player enter the room", async () => {
     mount();
-    await screen.findByRole("heading", { name: "Привет, Мира 👋" });
-    await waitFor(() =>
-      expect(
-        screen.getByRole("heading", { name: "Привет, Мира 👋" }),
-      ).toBeVisible(),
-    );
-    expect(
-      await screen.findByText("Тестовая кампания", {
-        selector: ".context-strip strong",
-      }),
-    ).toBeVisible();
+    await screen.findByRole("heading", { name: "Кампании" });
+    await waitFor(()=>expect(screen.getByRole('heading',{name:'Тестовая кампания'})).toBeVisible());
+    fireEvent.click(screen.getByRole('button',{name:/Войти в игру/}));
+    await screen.findByRole('heading',{name:'Игровая комната'});
     expect(screen.getAllByText("100").length).toBeGreaterThan(0);
   });
   it("renders auth after session denial", async () => {
@@ -208,8 +211,8 @@ describe("Connected routes", () => {
   });
   it("navigates into effects through router", async () => {
     mount();
-    await screen.findByRole("heading", { name: "Привет, Мира 👋" });
-    fireEvent.click(screen.getByRole("link", { name: "Эффекты 120" }));
+    await screen.findByRole("heading", { name: "Кампании" });
+    fireEvent.click(screen.getByRole("link", { name: "Эффекты" }));
     expect(
       await screen.findByRole("heading", { name: "Пусть случится история." }),
     ).toBeVisible();
@@ -264,18 +267,26 @@ it('player navigation excludes campaign management and master sheets', async()=>
   mount('/room');
   await screen.findByRole('heading',{name:'Игровая комната'});
   expect(screen.queryByRole('link',{name:'Управление кампанией'})).not.toBeInTheDocument();
-  expect(screen.getAllByRole('link',{name:'Мой персонаж'})[0]).toBeVisible();
+  await waitFor(()=>expect(screen.getAllByRole('link',{name:'Мой персонаж'})[0]).toBeVisible());
   expect(screen.queryByRole('button',{name:'Следующий ход'})).not.toBeInTheDocument();
 });
 it('master landing has separate tools and can switch to player view', async()=>{
   campaign.role='dm';mount('/');
-  await screen.findByRole('heading',{name:'Стол мастера'});
+  await screen.findByRole('heading',{name:'Кампании'});
+  fireEvent.click(screen.getByRole('button',{name:'Управлять'}));
+  await screen.findByRole('heading',{name:'Входящие запросы'});
   expect(screen.getByRole('link',{name:'Листы группы'})).toBeVisible();
-  expect(screen.queryByRole('link',{name:'Эффекты 120'})).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('link',{name:'Перейти в вид игрока'}));
-  await screen.findByRole('heading',{name:'Привет, Мира 👋'});
-  await waitFor(()=>expect(screen.getByRole('heading',{name:'Привет, Мира 👋'})).toBeVisible());
-  expect(screen.getByRole('link',{name:'Эффекты 120'})).toBeVisible();
+  fireEvent.click(screen.getByRole('link',{name:'Посмотреть как игрок'}));
+  await screen.findByRole('heading',{name:'Игровая комната'});
+  expect(screen.getByRole('link',{name:'Эффекты'})).toBeVisible();
+});
+it('searches the spell catalog on the server with combined filters',async()=>{
+  mount('/spells');
+  await screen.findByRole('heading',{name:'Справочник заклинаний'});
+  fireEvent.change(screen.getByPlaceholderText(/Например:/),{target:{value:'огненный'}});
+  fireEvent.change(screen.getByLabelText('Круг'),{target:{value:'3'}});
+  fireEvent.change(screen.getByLabelText('Класс'),{target:{value:'Wizard'}});
+  await waitFor(()=>expect(vi.mocked(globalThis.fetch).mock.calls.some(([path])=>String(path).includes('q=%D0%BE%D0%B3%D0%BD%D0%B5%D0%BD%D0%BD%D1%8B%D0%B9')&&String(path).includes('class=Wizard')&&String(path).includes('level=3'))).toBe(true));
 });
 it('player cannot enter master route by URL', async()=>{
   mount('/master');

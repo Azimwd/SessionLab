@@ -51,11 +51,12 @@ import {
   Count,
 } from "./components/ui";
 import Auth from "./pages/Auth";
+import Campaigns from "./pages/Campaigns";
 import Dashboard from "./pages/Dashboard";
 import { useRoomSync } from "./features/room/useRoomSync";
+import SpellCatalog, { SpellDetails } from './features/sheets/SpellCatalog';
 const Room = lazy(() => import("./pages/Room"));
 const Sheets = lazy(() => import("./pages/Sheets"));
-const SpellCatalog = lazy(() => import("./features/sheets/SpellCatalog"));
 const Effects = lazy(() => import("./pages/Effects"));
 const Quests = lazy(() => import("./pages/Quests"));
 const Casino = lazy(() => import("./pages/Casino"));
@@ -64,7 +65,6 @@ const Profile = lazy(() => import("./pages/Profile"));
 const DM = lazy(() => import("./pages/DM"));
 interface Ctx {
   masterMode: boolean;
-  setView: (view: "dm" | "player") => void;
   connection: string;
   user: Json;
   campaign: Json | null;
@@ -121,11 +121,11 @@ export function Scoped({ children }: { children: ReactNode }) {
     <>{children}</>
   ) : (
     <Empty
-      title="Создайте свою первую кампанию"
-      text="Или присоединитесь к друзьям по коду приглашения."
+      title="Присоединитесь к кампании"
+      text="Введите код приглашения от мастера на странице кампаний. Мастер также может создать собственную игру."
       action={
-        <Link className="button" to="/profile">
-          Настроить пространство <ArrowUpRight size={16} />
+        <Link className="button" to="/">
+          К кампаниям <ArrowUpRight size={16} />
         </Link>
       }
     />
@@ -150,10 +150,8 @@ export default function App() {
   const cs = campaigns.data?.results || [];
   const campaign = cs.find((c) => String(c.id) === selected) || cs[0] || null;
   const cid = String(campaign?.id || "");
-  const [views, setViews] = useState<Record<string, string>>({});
-  const playerRoute = /^\/(player|room|sheet|effects|quests|casino)(\/|$)/.test(location.pathname);
   const masterRoute = /^\/(master|dm)(\/|$)/.test(location.pathname);
-  const masterMode = campaign?.role === "dm" && (masterRoute || (!playerRoute && views[cid] !== "player"));
+  const masterMode = campaign?.role === "dm" && masterRoute;
   const connection = useRoomSync(cid, !!me.data);
   const chars = useData<any>(`/characters/?campaign=${cid}`, !!cid);
   const sessions = useData<Json[]>(`/campaigns/${cid}/sessions/`, !!cid);
@@ -161,7 +159,7 @@ export default function App() {
     localStorage.getItem("sl:character") || "",
   );
   const own = (chars.data?.results || []).filter(
-    (c: Json) => c.owner === me.data?.id && c.active,
+    (c: Json) => c.owner === me.data?.id && c.active && c.kind !== 'npc',
   );
   const character =
     own.find((c: Json) => String(c.id) === charId) || own[0] || null;
@@ -214,7 +212,6 @@ export default function App() {
     );
   const ctx: Ctx = {
     masterMode, connection,
-    setView: (view) => setViews(v => ({...v, [cid]: view})),
     user: me.data,
     campaign,
     campaigns: cs,
@@ -255,11 +252,13 @@ export default function App() {
           ) : (
             <Suspense fallback={<Loading />}>
               <Routes>
-                <Route path="/" element={masterMode ? <Navigate to="/master" replace/> : <Dashboard />} />
+                <Route path="/" element={<Campaigns/>} />
                 <Route path="/player" element={<Dashboard/>}/>
+                <Route path="/games" element={<Campaigns/>}/>
                 <Route path="/room" element={<Scoped><Room/></Scoped>}/>
                 <Route path="/sheet" element={<Scoped><Sheets/></Scoped>}/>
                 <Route path="/spells" element={<Scoped><SpellCatalog/></Scoped>}/>
+                <Route path="/spells/:id" element={<Scoped><SpellDetails/></Scoped>}/>
                 <Route path="/master" element={campaign?.role === "dm" ? <Room/> : <Navigate to="/room" replace/>}/>
                 <Route path="/master/sheets" element={campaign?.role === "dm" ? <Sheets/> : <Navigate to="/sheet" replace/>}/>
                 <Route
@@ -331,22 +330,18 @@ function Shell({ children }: { children: ReactNode }) {
   const nav = (a.masterMode ? [
     ["/master", "Стол мастера", Radio],
     ["/master/sheets", "Листы группы", BookOpen],
-    ["/spells", "Справочник заклинаний", FlaskConical],
     ["/dm", "Управление кампанией", SlidersHorizontal],
     ["/profile", "Мой профиль", UserRound],
   ] : [
+    ["/", "Кампании", LayoutDashboard],
     ["/room", "Игровая комната", Radio],
     ["/sheet", "Мой персонаж", BookOpen],
     ["/spells", "Справочник заклинаний", FlaskConical],
-    ["/", "Обзор", LayoutDashboard],
-    ["/effects", "Эффекты", Layers],
-    ["/quests", "Мини-квесты", Flag],
-    ["/casino", "Казино", Disc3],
     ["/profile", "Мой профиль", UserRound],
   ]) as [string, string, typeof Radio][];
   return (
-    <div className="app-shell">
-      <aside className={`sidebar ${menu ? "open" : ""}`}>
+    <div className={`app-shell ${a.masterMode?'master-layout':'player-layout'}`}>
+      {a.masterMode && <aside className={`sidebar ${menu ? "open" : ""}`}>
         <Link to="/" className="brand">
           <span className="brand-icon">
             <FlaskConical size={21} />
@@ -382,8 +377,8 @@ function Shell({ children }: { children: ReactNode }) {
           </div>
           <ChevronDown size={14} />
         </div>
-        <div className="role-space"><ShieldCheck size={16}/><strong>{a.masterMode ? "Вы — мастер" : "Пространство игрока"}</strong></div>
-        {a.campaign?.role === "dm" && <Link className="view-switch" to={a.masterMode ? "/player" : "/master"} onClick={() => {a.setView(a.masterMode ? "player" : "dm");setMenu(false);}}>{a.masterMode ? "Перейти в вид игрока" : "Вернуться к мастеру"}</Link>}
+        <div className="role-space"><ShieldCheck size={16}/><strong>Панель мастера</strong></div>
+        <Link className="view-switch" to="/room" onClick={() => setMenu(false)}>Посмотреть как игрок</Link>
         <div className="nav-label">{a.masterMode ? "ВАША КАМПАНИЯ" : "МОИ ИНСТРУМЕНТЫ"}</div>
         <nav>
           {nav.map(([to, label, Icon]) => (
@@ -395,7 +390,6 @@ function Shell({ children }: { children: ReactNode }) {
             >
               <Icon size={19} />
               <span>{label}</span>
-              {to === "/effects" && <span className="nav-number">120</span>}
             </NavLink>
           ))}
         </nav>
@@ -433,27 +427,21 @@ function Shell({ children }: { children: ReactNode }) {
             <ArrowUpRight size={16} />
           </Link>
         </div>
-      </aside>
+      </aside>}
       {menu && <div className="menu-backdrop" onClick={() => setMenu(false)} />}
       <div className="main-shell">
         <header className="topbar">
-          <button
+          {a.masterMode ? <button
             className="mobile-menu"
             aria-label="Открыть меню"
             onClick={() => setMenu(true)}
           >
             <Menu />
-          </button>
+          </button>:<Link className="brand player-brand" to="/"><span className="brand-icon"><FlaskConical size={19}/></span> session<span>lab</span></Link>}
           <div className="breadcrumb">
-            Пространство <span>/</span>{" "}
-            <strong>
-              {loc.pathname.startsWith("/dm")
-                ? "Панель мастера"
-                : nav.find(
-                    ([p]) => p !== "/" && loc.pathname.startsWith(p),
-                  )?.[1] || "Обзор"}
-            </strong>
+            {a.masterMode ? 'Панель управления' : <select aria-label="Текущая кампания" value={a.cid} onChange={e=>a.selectCampaign(e.target.value)}>{!a.campaign&&<option value="">Нет игры</option>}{a.campaigns.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>}
           </div>
+          <nav className="header-nav" aria-label="Навигация по игре"><NavLink to="/" end>Игры</NavLink><NavLink to="/room">Комната</NavLink><NavLink to="/sheet">Лист</NavLink><NavLink to="/spells">Заклинания</NavLink><NavLink to="/effects">Эффекты</NavLink><NavLink to="/quests">Квесты</NavLink><NavLink to="/casino">Казино</NavLink>{a.campaign?.role==='dm'&&<NavLink to="/dm">Панель управления</NavLink>}</nav>
           <div className="topbar-right">
             {a.session && (
               <span className="session-live">
@@ -461,11 +449,12 @@ function Shell({ children }: { children: ReactNode }) {
                 Сессия активна
               </span>
             )}
-            {!a.masterMode && <Link className="token-pill" to="/casino">
+            <Link className="token-pill" to="/casino">
               <Coins size={16} />
               <Count value={a.wallet.balance} />
               <small>ST</small>
-            </Link>}
+            </Link>
+            {!a.masterMode&&<Link className="header-profile" to="/profile" aria-label="Мой профиль"><UserRound size={18}/></Link>}
             <button
               aria-label="Выйти"
               title="Выйти"

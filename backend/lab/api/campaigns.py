@@ -52,6 +52,8 @@ class CampaignViewSet(viewsets.ModelViewSet):
         ).order_by("-created_at")
 
     def perform_create(self, serializer):
+        if self.request.user.account_role != 'dm':
+            raise PermissionDenied('Создавать кампании может аккаунт мастера')
         with transaction.atomic():
             campaign = serializer.save(owner=self.request.user)
             Membership.objects.create(
@@ -140,12 +142,17 @@ class CharacterViewSet(viewsets.ModelViewSet):
         if getattr(self, "swagger_fake_view", False):
             return Character.objects.none()
         campaign = campaign_for(self.request)
-        return Character.objects.filter(campaign=campaign).order_by("name")
+        qs = Character.objects.filter(campaign=campaign)
+        if not is_dm(campaign, self.request.user):
+            qs = qs.filter(kind='player')
+        return qs.order_by('name')
 
     def create(self, request, *args, **kwargs):
         def op(c):
             form = self.get_serializer(data=request.data)
             form.is_valid(raise_exception=True)
+            if form.validated_data.get('kind') == 'npc' and not is_dm(c, request.user):
+                raise PermissionDenied('Создавать NPC может только мастер')
             form.save(campaign=c, owner=request.user)
             return form.data
 
@@ -154,6 +161,8 @@ class CharacterViewSet(viewsets.ModelViewSet):
     def partial_update(self, request, *args, **kwargs):
         def op(c):
             obj = own_character(request, c, kwargs["pk"], is_dm(c, request.user))
+            if 'kind' in request.data and request.data['kind'] != obj.kind:
+                raise ValidationError('Тип участника нельзя изменить')
             form = self.get_serializer(obj, data=request.data, partial=True)
             form.is_valid(raise_exception=True)
             form.save()

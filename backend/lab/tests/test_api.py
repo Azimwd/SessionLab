@@ -71,6 +71,10 @@ def test_register_login_and_csrf(db):
         r.status_code == 200
         and c.get("/api/auth/me/").json()["data"]["email"] == "r@example.org"
     )
+    assert c.get('/api/auth/me/').json()['data']['account_role'] == 'player'
+    token = c.get('/api/auth/csrf/').json()['data']['csrfToken']
+    assert c.post('/api/campaigns/', {'name':'Not allowed'}, format='json', HTTP_X_CSRFTOKEN=token).status_code == 403
+    assert c.patch('/api/auth/me/', {'account_role':'dm'}, format='json', HTTP_X_CSRFTOKEN=token).status_code == 400
     token = c.get("/api/auth/csrf/").json()["data"]["csrfToken"]
     assert c.post("/api/auth/logout/", {}, HTTP_X_CSRFTOKEN=token).status_code == 200
     assert c.get("/api/auth/me/").status_code == 403
