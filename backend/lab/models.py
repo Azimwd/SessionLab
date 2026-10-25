@@ -65,6 +65,16 @@ class Membership(Timestamped):
         ]
 
 
+class CharacterFolder(Timestamped):
+    campaign = models.ForeignKey(Campaign, on_delete=models.PROTECT, related_name='character_folders')
+    owner = models.ForeignKey(User, on_delete=models.PROTECT)
+    name = models.CharField(max_length=80)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['campaign', 'owner', 'name'], name='unique_character_folder_name')]
+        ordering = ['name', 'id']
+
+
 class Character(Timestamped):
     campaign = models.ForeignKey(Campaign, on_delete=models.PROTECT)
     owner = models.ForeignKey(User, on_delete=models.PROTECT)
@@ -76,6 +86,7 @@ class Character(Timestamped):
     description = models.TextField(blank=True)
     avatar = models.URLField(blank=True)
     active = models.BooleanField(default=True)
+    folder = models.ForeignKey('CharacterFolder', on_delete=models.SET_NULL, null=True, blank=True, related_name='characters')
 
     class Meta:
         constraints = [
@@ -486,17 +497,12 @@ class InitiativeEntry(Timestamped):
     character = models.ForeignKey(
         Character, on_delete=models.PROTECT, null=True, blank=True
     )
+    player_slot = models.ForeignKey(Character, on_delete=models.PROTECT, null=True, blank=True, related_name='+')
     name = models.CharField(max_length=100)
     initiative = models.SmallIntegerField(default=0)
     dexterity = models.SmallIntegerField(default=0)
     hidden = models.BooleanField(default=False)
 
     class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["tracker", "character"],
-                condition=Q(character__isnull=False),
-                name="one_character_initiative",
-            )
-        ]
+        constraints = [models.UniqueConstraint(fields=['tracker', 'player_slot'], name='one_player_initiative')]
         ordering = ["-initiative", "-dexterity", "id"]

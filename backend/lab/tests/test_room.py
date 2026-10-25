@@ -45,6 +45,59 @@ def test_dice_math():
         assert d20(4, "disadvantage")["total"] == 6
 
 
+def test_folders_permissions_and_archived_character(world):
+    dm, player, outsider, campaign, char, session = world
+    url = scoped('/api/character-folders/', campaign)
+    folder = post(client(player), url, {'name': 'Важное'}).json()['data']
+    assert folder['owner'] == player.id
+    assert client(outsider).get(url).status_code == 403
+    assert post(client(dm), scoped('/api/characters/', campaign), {'name': 'NPC', 'kind': 'npc', 'folder': folder['id']}).status_code == 200
+    updated = patch_api(client(player), scoped(f'/api/characters/{char.id}/', campaign), {'folder': folder['id']}, 'move-folder-1')
+    assert updated.status_code == 200 and updated.json()['data']['folder'] == folder['id']
+    deleted = client(player).delete(scoped(f'/api/characters/{char.id}/', campaign), format='json', HTTP_IDEMPOTENCY_KEY='archive-char-1')
+    assert deleted.status_code == 200
+    char.refresh_from_db()
+    assert not char.active and client(player).get(scoped(f'/api/characters/{char.id}/', campaign)).status_code == 404
+
+
+def test_master_starts_bulk_initiative_and_broadcasts_rolls(world):
+    dm, player, outsider, campaign, char, session = world
+    npc = Character.objects.create(campaign=campaign, owner=dm, name='Гоблин', kind='npc')
+    url = scoped('/api/room/initiative/', campaign)
+    payload = {'action':'start', 'version':0, 'participants':[{'character':char.id}, {'character':npc.id,'count':3}, {'name':'Скелет','bonus':2,'count':2}]}
+    with patch('lab.services.dice.secrets.randbelow', return_value=9):
+        response = post(client(dm), url, payload, 'bulk-initiative-key')
+    assert response.status_code == 200, response.content
+    data = response.json()['data']
+    assert len(data['entries']) == 6
+    assert set(e['name'] for e in data['entries'] if e['name'].startswith('Гоблин')) == {'Гоблин 1','Гоблин 2','Гоблин 3'}
+    assert RoomEvent.objects.filter(campaign=campaign, kind='roll').count() == 6
+    assert client(player).get(scoped('/api/room/events/', campaign)).json()['data']['count'] == 6
+    assert post(client(dm), url, payload, 'bulk-initiative-key').json()['data'] == data
+    assert post(client(dm), url, payload, 'another-bulk-key').status_code == 409
+    renamed = post(client(dm), url, {'action':'edit','version':data['version'],'entry':data['entries'][0]['id'],'name':'Начальник'})
+    assert renamed.status_code == 200 and any(e['name']=='Начальник' for e in renamed.json()['data']['entries'])
+    stopped = post(client(dm), url, {'action':'stop','version':renamed.json()['data']['version']}).json()['data']
+    first = stopped['entries'][0]
+    edited = post(client(dm), url, {'action':'edit','version':stopped['version'],'entry':first['id'],'name':'Босс','initiative':21})
+    assert edited.status_code == 200 and any(e['name']=='Босс' for e in edited.json()['data']['entries'])
+
+
+def test_verified_fireball_upcast_save_damage(world):
+    dm, player, outsider, campaign, char, session = world
+    from lab.models import SpellCatalogEntry
+    entry = SpellCatalogEntry.objects.get(code='srd51-fireball')
+    sheet = sheet_for(char)
+    sheet.slots['4'] = {'max':1, 'used':0}
+    sheet.save()
+    action = CharacterAbility.objects.create(character=char, catalog_entry=entry, kind='spell', name='Огненный шар', ability='int', level=3, resolution='save', save_ability='dex', dice='8d6', upcast_dice='1d6')
+    with patch('lab.services.dice.secrets.randbelow', return_value=2):
+        r = post(client(player), scoped(f'/api/abilities/{action.id}/use/',campaign), {'slot_level':4})
+    assert r.status_code == 200, r.content
+    p = r.json()['data']['payload']
+    assert p['save']['dc'] == 10 and p['damage']['total'] == 27 and p['save']['success_damage'] == 13
+
+
 def test_sheet_permissions_party_and_version(world):
     dm, p, o, c, char, s = world
     sh = sheet_for(char)

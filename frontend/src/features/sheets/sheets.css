@@ -6,3 +6,22 @@
 .catalog-filters{display:grid;grid-template-columns:2fr 1fr;gap:12px;margin:18px 0}.catalog-list{max-height:min(58vh,520px);overflow:auto;display:grid;gap:8px}.catalog-row{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--border);border-radius:10px}.catalog-row>div{flex:1;min-width:0}.catalog-row strong{display:block;font-size:13px}.catalog-row small{display:block;color:var(--muted);font-size:11px;margin-top:3px}.catalog-pagination{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:14px}@media(max-width:480px){.catalog-filters{grid-template-columns:1fr}.catalog-row .button{min-width:95px}}
 .spell-reference{max-width:980px;margin:0 auto}.spell-reference h1{margin:0 0 18px}.spell-reference .catalog-list{max-height:none}.catalog-row details{font-size:12px;line-height:1.7;margin:8px 0}.catalog-row details a{color:var(--accent)}.catalog-row .inline-tags{margin:6px 0}
 .initiative-group{margin-top:18px}.initiative-group>h3{font-size:13px;display:flex;align-items:center;gap:10px}.initiative-tabs{display:flex;gap:8px;margin:10px 0 18px}.initiative-tabs .button{flex:1;justify-content:center}.initiative-group .initiative-list{margin-top:10px}
+
+/* Keep a large party contained within its own horizontal rail. */
+.party-grid{display:flex;overflow-x:auto;overscroll-behavior-inline:contain;scroll-snap-type:x proximity;padding-bottom:12px;max-width:100%}
+.party-card{flex:0 0 clamp(190px,23%,260px);scroll-snap-align:start;overflow-wrap:anywhere}
+.party-vitals{flex-wrap:wrap}
+.room-columns,.room-columns>*,.room-main,.dice-column{min-width:0}
+.initiative-list strong,.initiative-list small{overflow-wrap:anywhere}
+.initiative-selection{max-height:35vh;overflow:auto;margin:14px 0}
+.initiative-selection h3{margin:16px 0 8px}
+.initiative-pick{display:flex;align-items:center;gap:16px}
+.initiative-pick .field{max-width:110px;margin:0}
+.initiative-temp{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin:14px 0}
+.initiative-temp .field{flex:1;min-width:110px}
+.initiative-temp-row,.folder-chip{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:10px;padding:7px 10px;margin:4px;color:var(--text)}
+.initiative-temp-row button,.folder-chip button{display:inline-grid;place-items:center;color:var(--muted)}
+.sheet-folders{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.character-selector{max-width:100%;flex-wrap:wrap}
+.character-selector select{min-width:150px;flex:1}
+.party-card .inline-tags{max-height:90px;overflow-y:auto}

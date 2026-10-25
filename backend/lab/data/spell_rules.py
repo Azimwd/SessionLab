@@ -23,3 +23,7 @@ RULES = {
     "burning-hands": dict(casting_time="1 действие", range="На себя (конус 15 футов)", duration="Мгновенно", components="В, С", damage_type="огонь", save_ability="dex", description="Все существа в конусе 15 футов совершают спасбросок Ловкости. При провале 3d6 огнём, при успехе половина. Ячейка выше 1-го уровня добавляет 1d6. Поджигает ничейные горючие предметы.", verified=True),
     "lightning-bolt": dict(casting_time="1 действие", range="На себя (линия 100 × 5 футов)", duration="Мгновенно", components="В, С, М (мех и стержень из янтаря, хрусталя или стекла)", damage_type="электричество", save_ability="dex", description="Существа в линии длиной 100 и шириной 5 футов совершают спасбросок Ловкости: 8d6 электричеством при провале, половина при успехе. Ячейка выше 3-го уровня добавляет 1d6.", verified=True),
 }
+
+# SRD 5.1: these area effects deal half rolled damage on a successful save.
+for _code in ('thunderwave', 'fireball', 'burning-hands', 'lightning-bolt'):
+    RULES[_code]['save_half'] = True

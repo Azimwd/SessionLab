@@ -175,6 +175,7 @@ def perform_roll(campaign, user, data):
         InitiativeEntry.objects.create(
             tracker=tracker,
             character=char,
+            player_slot=char if char.kind == 'player' else None,
             name=char.name,
             initiative=result["total"],
             dexterity=stats["modifiers"]["dex"],
@@ -295,6 +296,12 @@ def use_ability(campaign, user, pk, data):
         payload["total_damage"] = sum(
             p.get("damage", {}).get("total", 0) for p in parts
         )
+    if ability.resolution == 'save' and ability.catalog_entry_id and ability.catalog_entry.template.get('save_half'):
+        for part in parts:
+            if 'damage' in part:
+                part['save']['success_damage'] = part['damage']['total'] // 2
+        if len(parts) == 1 and parts[0].get('save'):
+            payload['save'] = parts[0]['save']
     if ability.concentration and "Концентрация" not in sheet.conditions:
         sheet.conditions = [*sheet.conditions, "Концентрация"]
     sheet.version += 1

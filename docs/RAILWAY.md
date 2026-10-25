@@ -9,14 +9,14 @@
 ## Сервисы Railway
 
 1. Создайте проект и добавьте PostgreSQL. Оставьте его без публичного доступа.
-2. Создайте сервис **backend** из того же Git-репозитория. В Settings → Source задайте **Root Directory: `/backend`**. Публичный домен ему не нужен. В Settings → Build используйте Railpack. В Settings → Deploy установите **Start Command: `sh railway-start.sh`** и **Pre-deploy Command: `sh railway-predeploy.sh`**. Для сборки задайте **Build Command: `python manage.py collectstatic --noinput`** и переменную `RAILPACK_INSTALL_CMD=pip install -r requirements.lock.txt` для установки зафиксированных зависимостей.
+2. Создайте сервис **backend** из того же Git-репозитория. В Settings → Source задайте **Root Directory: `/backend`**. Публичный домен ему не нужен. В Settings → Build используйте Railpack. В Settings → Deploy установите **Start Command: `sh railway-start.sh`** и **Pre-deploy Command: `sh railway-predeploy.sh`**. Для сборки задайте **Build Command: `python manage.py collectstatic --noinput`**. Railpack автоматически установит зафиксированные зависимости из `requirements.txt`, который подключает `requirements.lock.txt`.
 3. Создайте сервис **frontend** из того же репозитория. Задайте **Root Directory: `/frontend`**, сборку Railpack, **Build Command: `npm run build`** и **Start Command: `npm run start`**. Railpack установит npm-зависимости из `package-lock.json`. Сгенерируйте для него публичный домен или подключите свой. Node-сервер отдаёт Vite `dist` и проксирует `/api/`, `/admin/`, `/static/` на backend, в том числе SSE.
 
 Railway задаёт публичному сервису `PORT` автоматически. Для backend задайте `PORT=8000`, чтобы адрес приватной сети был постоянным. Если вы назвали сервис иначе, чем `backend`, исправьте его имя в `BACKEND_URL`.
 
 ### Variables сервиса backend
 
-Вставляйте значения в интерфейс Railway как переменные сервиса. `RAILPACK_INSTALL_CMD` также относится к backend.
+Вставляйте значения в интерфейс Railway как переменные сервиса. **Не задавайте `RAILPACK_INSTALL_CMD`**: она заменяет стандартную установку Railpack и может оставить сборку без `/app/.venv`. Если переменная уже добавлена, удалите её и пересоберите сервис.
 
 ```dotenv
 PORT=8000
@@ -27,7 +27,6 @@ COOKIE_SECURE=1
 FORCE_HTTPS=1
 DJANGO_ALLOWED_HOSTS=<домен frontend без https://>
 CSRF_TRUSTED_ORIGINS=https://<домен frontend>
-RAILPACK_INSTALL_CMD=pip install -r requirements.lock.txt
 ```
 
 `Postgres` в ссылке должен совпадать с именем сервиса базы в вашем Railway. Для ключа выполните локально `python -c "import secrets; print(secrets.token_urlsafe(50))"` и сохраните значение только в Variables. `TEST_SQLITE` **не задавайте**. Если позднее назначите собственный домен, добавьте его в `DJANGO_ALLOWED_HOSTS` (через запятую, без схемы) и `CSRF_TRUSTED_ORIGINS` (через запятую, с `https://`). После этого обновите сервис.

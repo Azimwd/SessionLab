@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -134,7 +135,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
 
 class CharacterViewSet(viewsets.ModelViewSet):
     serializer_class = CharacterSerializer
-    http_method_names = ["get", "post", "patch", "head", "options"]
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
     search_fields = ["name", "character_class"]
     ordering_fields = ["name", "level"]
 
@@ -142,7 +143,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
         if getattr(self, "swagger_fake_view", False):
             return Character.objects.none()
         campaign = campaign_for(self.request)
-        qs = Character.objects.filter(campaign=campaign)
+        qs = Character.objects.filter(campaign=campaign, active=True)
         if not is_dm(campaign, self.request.user):
             qs = qs.filter(kind='player')
         return qs.order_by('name')
@@ -153,6 +154,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
             form.is_valid(raise_exception=True)
             if form.validated_data.get('kind') == 'npc' and not is_dm(c, request.user):
                 raise PermissionDenied('Создавать NPC может только мастер')
+            validate_character_folder(form.validated_data.get('folder'), c, request.user)
             form.save(campaign=c, owner=request.user)
             return form.data
 
@@ -165,10 +167,67 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 raise ValidationError('Тип участника нельзя изменить')
             form = self.get_serializer(obj, data=request.data, partial=True)
             form.is_valid(raise_exception=True)
+            validate_character_folder(form.validated_data.get('folder', obj.folder), c, request.user, obj)
             form.save()
             return form.data
 
         return mutate(request, request.query_params.get("campaign"), op)
+
+    def destroy(self, request, *args, **kwargs):
+        def op(c):
+            obj = own_character(request, c, kwargs['pk'], is_dm(c, request.user))
+            if InitiativeEntry.objects.filter(character=obj, tracker__running=True).exists():
+                raise ValidationError('Сначала завершите бой с этим персонажем')
+            obj.active = False
+            obj.save(update_fields=['active', 'updated_at'])
+            return {'id': obj.pk, 'archived': True}
+        return mutate(request, request.query_params.get('campaign'), op)
+
+
+def validate_character_folder(folder, campaign, user, character=None):
+    if folder is None:
+        return
+    if folder.campaign_id != campaign.pk or (folder.owner_id != user.pk and not is_dm(campaign, user) and (not character or character.folder_id != folder.pk)):
+        raise PermissionDenied('Папка недоступна в этой кампании')
+
+
+class CharacterFolderViewSet(viewsets.ModelViewSet):
+    serializer_class = CharacterFolderSerializer
+    http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
+
+    def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return CharacterFolder.objects.none()
+        c = campaign_for(self.request)
+        qs = CharacterFolder.objects.filter(campaign=c)
+        return qs if is_dm(c, self.request.user) else qs.filter(
+            Q(owner=self.request.user) | Q(characters__owner=self.request.user, characters__active=True, characters__kind='player')
+        ).distinct()
+
+    def create(self, request, *args, **kwargs):
+        def op(c):
+            form = self.get_serializer(data=request.data)
+            form.is_valid(raise_exception=True)
+            form.save(campaign=c, owner=request.user)
+            return form.data
+        return mutate(request, request.query_params.get('campaign'), op)
+
+    def partial_update(self, request, *args, **kwargs):
+        def op(c):
+            folder = get_object_or_404(CharacterFolder, pk=kwargs['pk'], campaign=c, owner=request.user)
+            form = self.get_serializer(folder, data=request.data, partial=True)
+            form.is_valid(raise_exception=True)
+            form.save()
+            return form.data
+        return mutate(request, request.query_params.get('campaign'), op)
+
+    def destroy(self, request, *args, **kwargs):
+        def op(c):
+            folder = get_object_or_404(CharacterFolder, pk=kwargs['pk'], campaign=c, owner=request.user)
+            pk = folder.pk
+            folder.delete()
+            return {'id': pk, 'deleted': True}
+        return mutate(request, request.query_params.get('campaign'), op)
 
 
 class SessionViewSet(viewsets.GenericViewSet):

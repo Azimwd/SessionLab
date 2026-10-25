@@ -14,6 +14,7 @@ router = DefaultRouter()
 for prefix, view, base in [
     ("campaigns", CampaignViewSet, "campaign"),
     ("characters", CharacterViewSet, "character"),
+    ("character-folders", CharacterFolderViewSet, "character-folder"),
     ("sessions", SessionViewSet, "session"),
     ("effects", EffectList, "effect"),
     ("quests", QuestList, "quest"),

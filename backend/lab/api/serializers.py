@@ -93,8 +93,16 @@ class CharacterSerializer(serializers.ModelSerializer):
             "description",
             "avatar",
             "active",
+            "folder",
         ]
         read_only_fields = ["campaign", "owner"]
+
+
+class CharacterFolderSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CharacterFolder
+        fields = ['id', 'campaign', 'owner', 'name']
+        read_only_fields = ['campaign', 'owner']
 
 
 class SessionSerializer(serializers.ModelSerializer):

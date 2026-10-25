@@ -28,7 +28,9 @@ from lab.services.sheets import (
     computed,
     controlled_character,
     sheet_for,
+    event,
 )
+from lab.services.dice import d20
 
 from .common import campaign_for, is_dm, mutate
 from .sheets import EventSerializer, require_version
@@ -166,7 +168,7 @@ class InitiativeView(APIView):
             require_version(tracker, {"version": expected})
             verb = request.data.get("action")
             if verb in ["add", "edit", "remove"]:
-                if tracker.running:
+                if tracker.running and (verb != 'edit' or 'initiative' in request.data or 'hidden' in request.data):
                     raise ValidationError(
                         "Остановите трекер перед изменением порядка участников"
                     )
@@ -178,11 +180,13 @@ class InitiativeView(APIView):
                         char = controlled_character(
                             c, request.user, request.data["character"]
                         )
+                        if char.kind == 'player' and tracker.entries.filter(player_slot=char).exists():
+                            raise ValidationError('Персонаж уже в инициативе')
                     name = char.name if char else request.data.get("name", "")
                     if not isinstance(name, str) or not 1 <= len(name.strip()) <= 100:
                         raise ValidationError("Укажите имя участника")
                     obj = InitiativeEntry(
-                        tracker=tracker, character=char, name=name.strip()
+                        tracker=tracker, character=char, player_slot=char if char and char.kind == 'player' else None, name=name.strip()
                     )
                 else:
                     entry = request.data.get("entry")
@@ -192,6 +196,11 @@ class InitiativeView(APIView):
                 if verb == "remove":
                     obj.delete()
                 else:
+                    if 'name' in request.data:
+                        name = request.data['name']
+                        if not isinstance(name, str) or not 1 <= len(name.strip()) <= 100:
+                            raise ValidationError('Укажите имя участника')
+                        obj.name = name.strip()
                     score = request.data.get("initiative", obj.initiative)
                     if type(score) is not int or not -100 <= score <= 100:
                         raise ValidationError("Инициатива: −100…100")
@@ -208,6 +217,39 @@ class InitiativeView(APIView):
             elif verb == "start":
                 if tracker.running:
                     raise ValidationError("Трекер уже запущен")
+                participants = request.data.get('participants', [])
+                if not isinstance(participants, list) or len(participants) > 100:
+                    raise ValidationError('Выберите не более 100 участников')
+                if participants and tracker.round_number:
+                    raise ValidationError('Для нового состава сначала сбросьте инициативу')
+                planned = []
+                for item in participants:
+                    if not isinstance(item, dict) or type(item.get('count', 1)) is not int or not 1 <= item.get('count', 1) <= 20:
+                        raise ValidationError('Количество экземпляров: 1–20')
+                    count = item.get('count', 1)
+                    if item.get('character') is not None:
+                        char = controlled_character(c, request.user, item['character'])
+                        if char.kind == 'player' and (count != 1 or tracker.entries.filter(player_slot=char).exists() or any(row[0] == char for row in planned)):
+                            raise ValidationError('Персонаж игрока может участвовать только один раз')
+                        sheet = sheet_for(char)
+                        bonus = computed(sheet)['initiative']
+                        dex = computed(sheet)['modifiers']['dex']
+                        name = char.name
+                    else:
+                        char, dex = None, 0
+                        name = item.get('name', '')
+                        bonus = item.get('bonus', 0)
+                        if not isinstance(name, str) or not 1 <= len(name.strip()) <= 100 or type(bonus) is not int or not -30 <= bonus <= 30:
+                            raise ValidationError('Для временного участника укажите имя и бонус −30…30')
+                        name = name.strip()
+                    if len(planned) + count + tracker.entries.count() > 100:
+                        raise ValidationError('Лимит: 100 участников')
+                    for i in range(count):
+                        planned.append((char, f'{name} {i + 1}' if count > 1 else name, bonus, dex))
+                for char, name, bonus, dex in planned:
+                    result = d20(bonus)
+                    InitiativeEntry.objects.create(tracker=tracker, character=char, player_slot=char if char and char.kind == 'player' else None, name=name, initiative=result['total'], dexterity=dex)
+                    event(c, s, request.user, char, 'roll', {'label': f'Инициатива · {name}', 'roll': result})
                 first = tracker.entries.first()
                 if not first:
                     raise ValidationError("Добавьте участников")

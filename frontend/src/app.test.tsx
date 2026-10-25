@@ -36,6 +36,7 @@ const campaign = {
 let authenticated = true;
 let activeRound = false;
 let spellAvailable = false;
+let activeSession = true;
 let mutation: Record<string, unknown> | null = null;
 function mockTransport() {
   return vi
@@ -76,7 +77,7 @@ function mockTransport() {
           ],
         };
       else if (url.startsWith("/campaigns/1/sessions/"))
-        data = [{ id: 1, name: "Первый шаг", status: "active", settings: {} }];
+        data = activeSession ? [{ id: 1, name: "Первый шаг", status: "active", settings: {} }] : [];
       else if (url.startsWith("/casino/wallet/"))
         data = { id: 1, balance: "100.00" };
       else if (url.startsWith("/casino/games/"))
@@ -173,6 +174,7 @@ beforeEach(() => {
   campaign.role = "player";
   activeRound = false;
   spellAvailable = false;
+  activeSession = true;
   mutation = null;
   localStorage.clear();
   sessionStorage.clear();
@@ -312,4 +314,13 @@ it('uses a saved spell through the API with one click and renders separate rolls
   await waitFor(()=>expect(mutation).toMatchObject({url:'/abilities/9/use/?campaign=1',method:'POST',body:{slot_level:1,mode:'normal',visibility:'public'}}));
   await waitFor(()=>expect(screen.getByText('Сумма результатов: 6')).toBeVisible());
   expect(screen.getAllByText(/Бросок [123]/)).toHaveLength(3);
+});
+it('explains why a spell cannot be applied without an active session', async()=>{
+  spellAvailable=true;
+  activeSession=false;
+  mount('/sheet');
+  fireEvent.click(await screen.findByRole('tab',{name:'Заклинания'}));
+  await screen.findByRole('heading',{name:'Три искры'});
+  expect(screen.getByRole('button',{name:'Применить'})).toBeDisabled();
+  expect(screen.getByText('В кампании нет активной сессии. Мастер должен начать сессию.')).toBeVisible();
 });

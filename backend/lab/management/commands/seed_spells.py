@@ -61,6 +61,7 @@ class Command(BaseCommand):
                 'upcast_count': options.get('upcast_count', 0),
                 'cantrip_scaling': level == 0 and bool(upcast_dice or options.get('upcast_count')),
                 'save_ability': rules.get('save_ability', options.get('save_ability', 'wis')),
+                'save_half': bool(rules.get('save_half')),
                 'casting_time': ru_rules['casting_time'],
                 'range': ru_rules['range'], 'duration': ru_rules['duration'],
                 'concentration': 'Концентрация' in ru_rules['duration'],

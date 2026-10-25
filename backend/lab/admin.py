@@ -52,6 +52,7 @@ for model in [
     Campaign,
     Membership,
     Character,
+    CharacterFolder,
     GameSession,
     EffectPool,
     EffectPoolEntry,
