@@ -127,6 +127,8 @@ class AbilitySerializer(serializers.ModelSerializer):
     rules_verified = serializers.SerializerMethodField()
     rules_recurring = serializers.SerializerMethodField()
     rules_deferred = serializers.SerializerMethodField()
+    rules_fixed_dc = serializers.SerializerMethodField()
+    rules_possible_saves = serializers.SerializerMethodField()
 
     def get_rules_verified(self, obj) -> bool | None:
         return bool(obj.catalog_entry.template.get('verified')) if obj.catalog_entry_id else None
@@ -137,10 +139,16 @@ class AbilitySerializer(serializers.ModelSerializer):
     def get_rules_deferred(self, obj) -> bool:
         return bool(obj.catalog_entry.template.get('deferred')) if obj.catalog_entry_id else False
 
+    def get_rules_fixed_dc(self, obj) -> int:
+        return int(obj.catalog_entry.template.get('fixed_save_dc') or 0) if obj.catalog_entry_id else 0
+
+    def get_rules_possible_saves(self, obj) -> list[str]:
+        return obj.catalog_entry.template.get('possible_saves', []) if obj.catalog_entry_id else []
+
     class Meta:
         model = CharacterAbility
         exclude = ["created_at", "updated_at"]
-        read_only_fields = ["id", "character", "version", "catalog_entry", "rules_verified", "rules_recurring", "rules_deferred"]
+        read_only_fields = ["id", "character", "version", "catalog_entry", "rules_verified", "rules_recurring", "rules_deferred", "rules_fixed_dc", "rules_possible_saves"]
         extra_kwargs = {"dice": {"allow_blank": True}}
 
     def validate(self, data):

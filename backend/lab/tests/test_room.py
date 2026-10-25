@@ -697,8 +697,11 @@ def test_deferred_spell_rolls_only_on_trigger_without_second_slot(world):
     sheet.save()
     url = scoped(f'/api/abilities/{spell["id"]}/use/', campaign)
     assert post(client(player), url, {'trigger': True}).status_code == 400
-    first = post(client(player), url, {'slot_level': 2}).json()['data']['payload']
-    assert first['deferred'] and 'damage' not in first and first['trigger'] is False
+    with patch('lab.services.dice.secrets.randbelow', return_value=2):
+        first = post(client(player), url, {'slot_level': 2}).json()['data']['payload']
+    assert first['deferred'] and first['damage']['total'] == 6 and first['trigger'] is False
+    assert first['save']['success_damage'] == 3 and first['save']['failed_damage'] == 6
+    assert 'Предварительный бросок' in first['adjudication']
     with patch('lab.services.dice.secrets.randbelow', return_value=2):
         second = post(client(player), url, {'trigger': True}, 'moonbeam-trigger').json()['data']['payload']
     assert second['damage']['total'] == 6 and second['save']['success_damage'] == 3
@@ -709,3 +712,53 @@ def test_deferred_spell_rolls_only_on_trigger_without_second_slot(world):
     sheet.conditions = []
     sheet.save()
     assert post(client(player), url, {'trigger': True}, 'new-trigger').status_code == 400
+
+
+@pytest.mark.parametrize('name,level,formula,save,success_factor', [
+    ('Vicious Mockery', 0, '1d4', 'wis', 0),
+    ('Fireball', 3, '8d6', 'dex', 0.5),
+    ('Disintegrate', 6, '10d6+40', 'dex', 0),
+    ('Feeblemind', 8, '4d6', 'int', 1),
+])
+def test_save_spell_reports_both_damage_outcomes(world, name, level, formula, save, success_factor):
+    dm, player, outsider, campaign, char, session = world
+    entry = SpellCatalogEntry.objects.get(name_en=name)
+    spell = post(client(player), scoped(f'/api/characters/{char.pk}/spells/catalog/', campaign), {'spell_id': entry.pk}).json()['data']
+    sheet = sheet_for(char)
+    if level:
+        sheet.slots[str(level)] = {'max':1,'used':0}
+        sheet.save()
+    with patch('lab.services.dice.secrets.randbelow', return_value=2):
+        response = post(client(player), scoped(f'/api/abilities/{spell["id"]}/use/', campaign), {'slot_level': level})
+    assert response.status_code == 200, response.content
+    payload = response.json()['data']['payload']
+    failed = payload['damage']['total']
+    assert payload['damage']['formula'] == formula
+    assert payload['save'] == {'ability':save,'dc':10,'failed_damage':failed,
+                               'success_damage':int(failed * success_factor)}
+
+
+def test_fixed_dc_and_repeated_spell_save_can_change_ability(world):
+    dm, player, outsider, campaign, char, session = world
+    sheet = sheet_for(char)
+    sheet.slots['5'] = {'max': 1, 'used': 0}
+    sheet.slots['7'] = {'max': 1, 'used': 0}
+    sheet.save()
+    for name, level in [('Contact Other Plane', 5), ('Wall of Ice', 7)]:
+        entry = SpellCatalogEntry.objects.get(name_en=name)
+        spell = post(client(player), scoped(f'/api/characters/{char.pk}/spells/catalog/', campaign), {'spell_id':entry.pk}).json()['data']
+        with patch('lab.services.dice.secrets.randbelow', return_value=2):
+            response = post(client(player), scoped(f'/api/abilities/{spell["id"]}/use/', campaign), {'slot_level':level})
+        assert response.status_code == 200, response.content
+        payload = response.json()['data']['payload']
+        if name == 'Contact Other Plane':
+            assert payload['save'] == {'ability':'int','dc':15,'failed_damage':18,'success_damage':0}
+        else:
+            assert payload['save'] == {'ability':'dex','dc':10,'failed_damage':36,'success_damage':18}
+            with patch('lab.services.dice.secrets.randbelow', return_value=2):
+                triggered = post(client(player), scoped(f'/api/abilities/{spell["id"]}/use/', campaign), {'trigger':True})
+            assert triggered.status_code == 200, triggered.content
+            repeat = triggered.json()['data']['payload']
+            assert repeat['save'] == {'ability':'con','dc':10,'failed_damage':18,'success_damage':9}
+    sheet.refresh_from_db()
+    assert sheet.slots['5']['used'] == sheet.slots['7']['used'] == 1

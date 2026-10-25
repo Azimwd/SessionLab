@@ -293,7 +293,16 @@ def use_ability(campaign, user, pk, data):
             payload["adjudication"] = "СЛ, бонус атаки и ячейка рассчитаны. Эффект, цели и особые условия определяйте по описанию с мастером."
     if ability.kind == 'spell':
         payload['spell_attack_bonus'] = bonus
-        payload['spell_save_dc'] = 8 + bonus
+        fixed_dc = ability.catalog_entry.template.get('fixed_save_dc', 0) if ability.catalog_entry_id else 0
+        payload['spell_save_dc'] = fixed_dc or 8 + bonus
+    effective_dice = ability.dice
+    effective_upcast = ability.upcast_dice
+    effective_save = ability.save_ability
+    if trigger and ability.catalog_entry_id:
+        rules = ability.catalog_entry.template
+        effective_dice = rules.get('trigger_dice') or effective_dice
+        effective_upcast = rules.get('trigger_upcast_dice') or effective_upcast
+        effective_save = rules.get('trigger_save_ability') or effective_save
     steps = (
         sum(char.level >= n for n in [5, 11, 17])
         if ability.kind == "spell" and ability.level == 0 and ability.cantrip_scaling
@@ -301,7 +310,7 @@ def use_ability(campaign, user, pk, data):
     )
     count = ability.roll_count + steps * ability.upcast_count
     if not trigger and payload.get('deferred'):
-        count = 0
+        payload['adjudication'] = 'Предварительный бросок урона. По правилам он применяется только при срабатывании условия из описания, а не при наложении.'
     if count > 20:
         raise ValidationError("Слишком много отдельных бросков: максимум 20")
     parts = []
@@ -312,34 +321,38 @@ def use_ability(campaign, user, pk, data):
             part["roll"] = d20(bonus, data.get("mode", "normal"))
             critical = part["roll"]["chosen"] == 20
         elif payload['resolution'] == "save":
-            part["save"] = {"ability": ability.save_ability, "dc": 8 + bonus}
-        if ability.dice:
-            part["damage"] = roll_formula(ability.dice, critical=critical)
+            part["save"] = {"ability": effective_save, "dc": payload.get('spell_save_dc', 8 + bonus)}
+        if effective_dice:
+            part["damage"] = roll_formula(effective_dice, critical=critical)
             if ability.add_modifier:
                 mod = modifier(sheet, casting_ability)
                 part["damage"]["total"] += mod
                 part["damage"]["ability_modifier"] = mod
-            if steps and ability.upcast_dice:
+            if steps and effective_upcast:
                 extras = [
-                    roll_formula(ability.upcast_dice, critical=critical)
+                    roll_formula(effective_upcast, critical=critical)
                     for _ in range(steps)
                 ]
                 part["upcast"] = extras
                 part["damage"]["total"] += sum(r["total"] for r in extras)
         parts.append(part)
-    if not parts and payload.get('deferred'):
-        payload['adjudication'] = 'Заклинание наложено. Нажмите «Бросить эффект», когда наступит условие из описания.'
-    elif len(parts) == 1:
+    if len(parts) == 1:
         payload.update(parts[0])
     else:
         payload["parts"] = parts
         payload["total_damage"] = sum(
             p.get("damage", {}).get("total", 0) for p in parts
         )
-    if payload['resolution'] == 'save' and ability.catalog_entry_id and ability.catalog_entry.template.get('save_half'):
+    if payload['resolution'] == 'save':
+        template = ability.catalog_entry.template if ability.catalog_entry_id else {}
         for part in parts:
             if 'damage' in part:
-                part['save']['success_damage'] = part['damage']['total'] // 2
+                damage = part['damage']['total']
+                part['save']['failed_damage'] = damage
+                part['save']['success_damage'] = (
+                    damage // 2 if template.get('save_half') else
+                    damage if template.get('save_success_full') else 0
+                )
         if len(parts) == 1 and parts[0].get('save'):
             payload['save'] = parts[0]['save']
     if not trigger and ability.concentration and "Концентрация" not in sheet.conditions:

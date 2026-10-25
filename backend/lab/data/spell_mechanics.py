@@ -19,16 +19,19 @@ def possible_saves(source):
     return list(dict.fromkeys(ABILITIES[match] for match in SAVE_PATTERN.findall(source)))
 
 
-def preset(resolution='automatic', dice='', upcast_dice='', *, save='', half=False,
+def preset(resolution='automatic', dice='', upcast_dice='', *, save='', half=False, success_full=False,
            damage_type='', modifier=False, count=1, count_upcast=0,
            cantrip=False, recurring=False, deferred=False, upcast_every=1,
-           trigger_resolution='', note=''):
+           trigger_resolution='', trigger_dice='', trigger_upcast_dice='',
+           trigger_save='', fixed_dc=0, note=''):
     return dict(resolution=resolution, dice=dice, upcast_dice=upcast_dice,
-                save_ability=save, save_half=half, damage_type=damage_type,
+                save_ability=save, save_half=half, save_success_full=success_full, damage_type=damage_type,
                 add_modifier=modifier, roll_count=count,
                 upcast_count=count_upcast, cantrip_scaling=cantrip,
                 recurring=recurring, deferred=deferred, upcast_every=upcast_every, mechanics_note=note,
                 trigger_resolution=trigger_resolution,
+                trigger_dice=trigger_dice, trigger_upcast_dice=trigger_upcast_dice,
+                trigger_save_ability=trigger_save, fixed_save_dc=fixed_dc,
                 verified=True)
 
 
@@ -94,7 +97,7 @@ EXTRA = {
                               note='Ячейка выше шестого уровня добавляет одну цель, а не кубы урона.'),
     'Disintegrate': preset('save', '10d6+40', '3d6', save='dex', damage_type='силовое поле',
                            note='При успешном спасброске урон равен нулю. Предметы обрабатываются отдельно по описанию.'),
-    'Feeblemind': preset('save', '4d6', save='int', damage_type='психический',
+    'Feeblemind': preset('save', '4d6', save='int', success_full=True, damage_type='психический',
                          note='Урон наносится до спасброска; эффект снижения характеристик только при его провале.'),
     'Harm': preset('save', '14d6', save='con', half=True, damage_type='некротический',
                    note='Урон не опускает хиты ниже 1; уменьшение максимума хитов только при провале.'),
@@ -125,4 +128,9 @@ EXTRA = {
                           note='Урон наносится атакующему в 5 футах, когда он попадает по вам в ближнем бою.'),
     'Phantasmal Killer': preset('save', '4d10', '1d10', save='wis', damage_type='психический', recurring=True, deferred=True,
                                 note='При создании — спасбросок от испуга; урон только в конце хода цели при новом провале.'),
+    'Contact Other Plane': preset('save', '6d6', save='int', fixed_dc=15, damage_type='психический',
+                                  note='Спасбросок Интеллекта СЛ 15 делает сам заклинатель. Урон только при провале.'),
+    'Wall of Ice': preset('save', '10d6', '2d6', save='dex', half=True, damage_type='холод', recurring=True,
+                          trigger_dice='5d6', trigger_upcast_dice='1d6', trigger_save='con',
+                          note='При появлении стены — Ловкость, 10d6 (+2d6 за уровень). Через оставшийся холодный воздух — Телосложение, 5d6 (+1d6 за уровень).'),
 }

@@ -149,13 +149,15 @@ export function Modal({
   wide?: boolean;
 }) {
   const panel = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
     const old = document.activeElement as HTMLElement;
     const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     panel.current?.focus();
     const key = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") closeRef.current();
       if (e.key === "Tab") {
         const nodes = panel.current?.querySelectorAll<HTMLElement>(
           "button:not([disabled]),input,textarea,select,a[href]",
@@ -182,7 +184,7 @@ export function Modal({
       document.removeEventListener("keydown", key);
       old?.focus();
     };
-  }, [onClose]);
+  }, []);
   return createPortal(
     <div
       className="overlay"

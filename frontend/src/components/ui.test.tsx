@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
+import { useState } from "react";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { Button, Modal, Status, Pagination, ErrorBox } from "./ui";
 import GameVisual from "./GameVisual";
 import Auth from "../pages/Auth";
+import { RollResult } from "../features/room/RollResult";
 import { request, clearCsrf } from "../api/client";
 afterEach(() => {
   cleanup();
@@ -34,6 +36,33 @@ describe("UI behavior", () => {
     ).toBeInTheDocument();
     fireEvent.keyDown(document, { key: "Escape" });
     expect(close).toHaveBeenCalledOnce();
+  });
+  it("keeps focus while editing controlled fields with an inline close callback", () => {
+    function TemporaryOpponent() {
+      const [name, setName] = useState("");
+      const [bonus, setBonus] = useState(0);
+      const [count, setCount] = useState(1);
+      return <Modal title="Временные противники" onClose={() => {}}>
+        <input aria-label="Имя" value={name} onChange={e => setName(e.target.value)} />
+        <input aria-label="Бонус инициативы" type="number" value={bonus} onChange={e => setBonus(Number(e.target.value))} />
+        <input aria-label="Количество" type="number" value={count} onChange={e => setCount(Number(e.target.value))} />
+      </Modal>;
+    }
+    render(<TemporaryOpponent />);
+    for (const [label, value] of [["Имя", "Гоблин"], ["Бонус инициативы", "12"], ["Количество", "15"]]) {
+      const input = screen.getByLabelText(label) as HTMLInputElement;
+      input.focus();
+      for (let index = 1; index <= value.length; index++) {
+        fireEvent.change(input, { target: { value: value.slice(0, index) } });
+        expect(document.activeElement).toBe(input);
+      }
+      expect(input.value).toBe(value);
+    }
+  });
+  it("shows the spell DC and both damage outcomes without deciding the target's save", () => {
+    render(<RollResult event={{ id: 1, actor_name: "Маг", created_at: new Date().toISOString(), kind: "ability", visibility: "public", payload: { label: "Огненный шар", kind: "spell", slot_level: 4, spell_save_dc: 15, save: { ability: "dex", dc: 15, failed_damage: 33, success_damage: 16 }, damage: { formula: "8d6", terms: [], total: 33 } } }} />);
+    expect(screen.getByText(/Спасбросок:/)).toHaveTextContent("СЛ 15");
+    expect(screen.getByText(/Если успешен/)).toHaveTextContent("16 урона; если провален — 33 урона");
   });
   it("renders pending quest state", () => {
     render(<Status status="pending_verification" />);
