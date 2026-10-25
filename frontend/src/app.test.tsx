@@ -189,7 +189,7 @@ describe("Connected routes", () => {
     mount('/spells/5');
     await waitFor(()=>expect(screen.getByRole('heading', {name:'Исполнение желаний'})).toBeVisible());
     expect(screen.getByText(/Желание меняет реальность/)).toBeVisible();
-    expect(screen.getByText(/Автоматический расчёт особых эффектов пока не настроен/)).toBeVisible();
+    expect(screen.getByText(/Особые эффекты определяются по описанию с мастером/)).toBeVisible();
     expect(screen.getByText('Действие')).toBeVisible();
     expect(screen.getByText('Оригинальный текст SRD 5.1 на английском')).toBeVisible();
   });

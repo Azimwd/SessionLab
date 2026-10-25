@@ -223,26 +223,46 @@ def use_ability(campaign, user, pk, data):
     )
     char = controlled_character(campaign, user, ability.character_id)
     session, sheet = active_session(campaign), sheet_for(char)
-    level = data.get("slot_level", ability.level)
+    trigger = data.get('trigger', False)
+    if type(trigger) is not bool:
+        raise ValidationError('trigger: boolean')
+    if trigger:
+        if not ability.catalog_entry_id or not ability.catalog_entry.template.get('recurring'):
+            raise ValidationError('У этого заклинания нет повторного числового эффекта')
+        latest = RoomEvent.objects.filter(
+            campaign=campaign, session=session, character=char, kind='ability',
+            payload__ability_id=ability.pk).order_by('-id').first()
+        original = (RoomEvent.objects.filter(pk=latest.payload['source_cast_id'],
+                    campaign=campaign, session=session, character=char).first()
+                    if latest and latest.payload.get('trigger') and latest.payload.get('source_cast_id')
+                    else latest)
+        if not original:
+            raise ValidationError('Сначала наложите заклинание в этой сессии')
+        if ability.concentration and 'Концентрация' not in sheet.conditions:
+            raise ValidationError('Концентрация прекращена: повторный эффект недоступен')
+        level = original.payload['slot_level']
+    else:
+        level = data.get("slot_level", ability.level)
     if type(level) is not int or not ability.level <= level <= 9:
         raise ValidationError("Некорректный уровень ячейки")
     if ability.kind == "attack" or ability.level == 0:
         if level != ability.level:
             raise ValidationError("Эта способность не использует повышенную ячейку")
-    elif ability.kind == "spell":
+    elif ability.kind == "spell" and not trigger:
         if level > ability.level and not ability.upcast_allowed:
             raise ValidationError("Правила этого заклинания не разрешают повышенную ячейку")
         slot = sheet.slots[str(level)]
         if slot["used"] >= slot["max"]:
             raise ValidationError("Нет свободных ячеек этого уровня")
         sheet.slots = {**sheet.slots, str(level): {**slot, "used": slot["used"] + 1}}
+    casting_ability = sheet.spell_ability if ability.kind == 'spell' and ability.catalog_entry_id else ability.ability
     bonus = (
-        modifier(sheet, ability.ability)
+        modifier(sheet, casting_ability)
         + (proficiency(sheet) if ability.proficient else 0)
         + ability.bonus
     )
     payload = {
-        "label": ability.name,
+        "label": f'{ability.name} · повторный эффект' if trigger else ability.name,
         "kind": ability.kind,
         "description": ability.description,
         "ability_id": ability.pk,
@@ -251,34 +271,52 @@ def use_ability(campaign, user, pk, data):
         "damage_type": ability.damage_type,
         "resolution": ability.resolution,
         "concentration": ability.concentration,
+        "trigger": trigger,
     }
+    if trigger:
+        payload['source_cast_id'] = original.pk
     if ability.catalog_entry_id:
         # Snapshot rules before a future seed or administrator edit changes them.
-        payload["verified_rules"] = bool(ability.catalog_entry.template.get("verified"))
-        payload["components"] = ability.catalog_entry.template.get("components", "")
+        template = ability.catalog_entry.template
+        payload["verified_rules"] = bool(template.get("verified"))
+        payload["components"] = template.get("components", "")
+        payload["mechanics_note"] = template.get("mechanics_note", "")
+        payload["recurring"] = bool(template.get("recurring"))
+        payload['deferred'] = bool(template.get('deferred'))
+        payload["possible_saves"] = template.get("possible_saves", [])
+        payload["possible_spell_attack"] = bool(template.get("possible_spell_attack"))
+        if trigger and template.get('trigger_resolution'):
+            payload['resolution'] = template['trigger_resolution']
+            if payload['resolution'] == 'automatic':
+                payload['possible_saves'] = []
         if not payload["verified_rules"]:
-            payload["adjudication"] = "Эффект требует сверки с правилами и решения мастера. Автоматические броски этой записи не подтверждены."
+            payload["adjudication"] = "СЛ, бонус атаки и ячейка рассчитаны. Эффект, цели и особые условия определяйте по описанию с мастером."
+    if ability.kind == 'spell':
+        payload['spell_attack_bonus'] = bonus
+        payload['spell_save_dc'] = 8 + bonus
     steps = (
         sum(char.level >= n for n in [5, 11, 17])
         if ability.kind == "spell" and ability.level == 0 and ability.cantrip_scaling
-        else level - ability.level
+        else (level - ability.level) // (ability.catalog_entry.template.get('upcast_every', 1) if ability.catalog_entry_id else 1)
     )
     count = ability.roll_count + steps * ability.upcast_count
+    if not trigger and payload.get('deferred'):
+        count = 0
     if count > 20:
         raise ValidationError("Слишком много отдельных бросков: максимум 20")
     parts = []
     for index in range(count):
         part = {}
         critical = False
-        if ability.resolution == "attack":
+        if payload['resolution'] == "attack":
             part["roll"] = d20(bonus, data.get("mode", "normal"))
             critical = part["roll"]["chosen"] == 20
-        elif ability.resolution == "save":
+        elif payload['resolution'] == "save":
             part["save"] = {"ability": ability.save_ability, "dc": 8 + bonus}
         if ability.dice:
             part["damage"] = roll_formula(ability.dice, critical=critical)
             if ability.add_modifier:
-                mod = modifier(sheet, ability.ability)
+                mod = modifier(sheet, casting_ability)
                 part["damage"]["total"] += mod
                 part["damage"]["ability_modifier"] = mod
             if steps and ability.upcast_dice:
@@ -289,23 +327,26 @@ def use_ability(campaign, user, pk, data):
                 part["upcast"] = extras
                 part["damage"]["total"] += sum(r["total"] for r in extras)
         parts.append(part)
-    if len(parts) == 1:
+    if not parts and payload.get('deferred'):
+        payload['adjudication'] = 'Заклинание наложено. Нажмите «Бросить эффект», когда наступит условие из описания.'
+    elif len(parts) == 1:
         payload.update(parts[0])
     else:
         payload["parts"] = parts
         payload["total_damage"] = sum(
             p.get("damage", {}).get("total", 0) for p in parts
         )
-    if ability.resolution == 'save' and ability.catalog_entry_id and ability.catalog_entry.template.get('save_half'):
+    if payload['resolution'] == 'save' and ability.catalog_entry_id and ability.catalog_entry.template.get('save_half'):
         for part in parts:
             if 'damage' in part:
                 part['save']['success_damage'] = part['damage']['total'] // 2
         if len(parts) == 1 and parts[0].get('save'):
             payload['save'] = parts[0]['save']
-    if ability.concentration and "Концентрация" not in sheet.conditions:
+    if not trigger and ability.concentration and "Концентрация" not in sheet.conditions:
         sheet.conditions = [*sheet.conditions, "Концентрация"]
-    sheet.version += 1
-    sheet.save()
+    if not trigger:
+        sheet.version += 1
+        sheet.save()
     return event(
         campaign,
         session,

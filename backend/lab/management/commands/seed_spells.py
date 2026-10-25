@@ -6,7 +6,8 @@ from django.db import transaction
 from django.utils.text import slugify
 from lab.data.spell_catalog import SPELLS, SPECIAL
 from lab.data.spell_rules import RULES
-from lab.models import SpellCatalogEntry
+from lab.data.spell_mechanics import EXTRA, possible_saves
+from lab.models import CharacterAbility, SpellCatalogEntry
 
 
 class Command(BaseCommand):
@@ -44,23 +45,34 @@ class Command(BaseCommand):
             options = SPECIAL.get(code, {})
             # Unconfigured effects record the cast and slot expenditure. Their targets,
             # attacks and saves must be handled by the table until a verified preset exists.
-            rules = RULES.get(code, {})
+            rules = RULES.get(code, EXTRA.get(en, {}))
             source = official[en]
             ru_rules = russian[en]
             if not rules.get('verified'):
                 # An index entry is not an executable rules implementation.
                 resolution, dice, upcast_dice = 'automatic', '', ''
+            if en in EXTRA:
+                resolution = rules['resolution']
+                dice = rules['dice']
+                upcast_dice = rules['upcast_dice']
             template = {
                 'description': ru_rules['description'],
                 'proficient': True, 'bonus': 0,
                 'resolution': resolution, 'dice': dice,
-                'add_modifier': options.get('add_modifier', False),
+                'add_modifier': rules.get('add_modifier', options.get('add_modifier', False)),
                 'damage_type': rules.get('damage_type', ''), 'upcast_dice': upcast_dice,
                 'upcast_allowed': level > 0,
-                'roll_count': options.get('roll_count', 1),
-                'upcast_count': options.get('upcast_count', 0),
+                'roll_count': rules.get('roll_count', options.get('roll_count', 1)),
+                'upcast_count': rules.get('upcast_count', options.get('upcast_count', 0)),
                 'cantrip_scaling': level == 0 and bool(upcast_dice or options.get('upcast_count')),
-                'save_ability': rules.get('save_ability', options.get('save_ability', 'wis')),
+                'upcast_every': rules.get('upcast_every', 1),
+                'recurring': rules.get('recurring', False),
+                'deferred': rules.get('deferred', False),
+                'trigger_resolution': rules.get('trigger_resolution', ''),
+                'mechanics_note': rules.get('mechanics_note', ''),
+                'possible_saves': possible_saves(source['description_en']),
+                'possible_spell_attack': 'spell attack' in source['description_en'].lower(),
+                'save_ability': rules.get('save_ability') or options.get('save_ability', 'wis'),
                 'save_half': bool(rules.get('save_half')),
                 'casting_time': ru_rules['casting_time'],
                 'range': ru_rules['range'], 'duration': ru_rules['duration'],
@@ -83,13 +95,26 @@ class Command(BaseCommand):
             if key in codes:
                 raise ValueError(f'Duplicate SRD slug: {key}')
             codes.add(key)
-            SpellCatalogEntry.objects.update_or_create(
+            catalog_entry, _ = SpellCatalogEntry.objects.update_or_create(
                 code=key,
                 defaults={'name_ru': ru, 'name_en': en, 'edition': '5e-2014',
                           'level': level, 'source': 'SRD 5.1 · CC BY 4.0',
                           'template': template, 'active': True},
             )
+            # Records added before this preset existed have blank, automatic
+            # mechanics. Upgrade only those untouched defaults; leave user edits.
+            if en in EXTRA:
+                from django.db.models import F
+                CharacterAbility.objects.filter(
+                    catalog_entry=catalog_entry, active=True, dice='', resolution='automatic'
+                ).update(resolution=resolution, dice=dice, upcast_dice=upcast_dice,
+                         save_ability=template['save_ability'], add_modifier=template['add_modifier'],
+                         damage_type=template['damage_type'], cantrip_scaling=template['cantrip_scaling'],
+                         roll_count=template['roll_count'], upcast_count=template['upcast_count'],
+                         version=F('version') + 1)
         # Earlier versions listed a non-SRD spell under an SRD code. Keep historical
         # references, but remove it from the public catalog.
         SpellCatalogEntry.objects.filter(code__startswith='srd51-').exclude(code__in=codes).update(active=False)
-        self.stdout.write(self.style.SUCCESS(f'{len(codes)} Russian SRD 5.1 spell descriptions (15 automated presets).'))
+        self.stdout.write(self.style.SUCCESS(
+            f'{len(codes)} Russian SRD 5.1 spells ({sum(bool(r.get("verified")) for r in RULES.values()) + len(EXTRA)} numerical presets).'
+        ))

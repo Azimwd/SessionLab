@@ -125,14 +125,22 @@ class SheetSerializer(serializers.ModelSerializer):
 
 class AbilitySerializer(serializers.ModelSerializer):
     rules_verified = serializers.SerializerMethodField()
+    rules_recurring = serializers.SerializerMethodField()
+    rules_deferred = serializers.SerializerMethodField()
 
     def get_rules_verified(self, obj) -> bool | None:
         return bool(obj.catalog_entry.template.get('verified')) if obj.catalog_entry_id else None
 
+    def get_rules_recurring(self, obj) -> bool:
+        return bool(obj.catalog_entry.template.get('recurring')) if obj.catalog_entry_id else False
+
+    def get_rules_deferred(self, obj) -> bool:
+        return bool(obj.catalog_entry.template.get('deferred')) if obj.catalog_entry_id else False
+
     class Meta:
         model = CharacterAbility
         exclude = ["created_at", "updated_at"]
-        read_only_fields = ["id", "character", "version", "catalog_entry", "rules_verified"]
+        read_only_fields = ["id", "character", "version", "catalog_entry", "rules_verified", "rules_recurring", "rules_deferred"]
         extra_kwargs = {"dice": {"allow_blank": True}}
 
     def validate(self, data):

@@ -70,6 +70,7 @@ def test_master_starts_bulk_initiative_and_broadcasts_rolls(world):
     assert response.status_code == 200, response.content
     data = response.json()['data']
     assert len(data['entries']) == 6
+    assert [e['initiative'] for e in data['entries']] == sorted((e['initiative'] for e in data['entries']), reverse=True)
     assert set(e['name'] for e in data['entries'] if e['name'].startswith('Гоблин')) == {'Гоблин 1','Гоблин 2','Гоблин 3'}
     assert RoomEvent.objects.filter(campaign=campaign, kind='roll').count() == 6
     assert client(player).get(scoped('/api/room/events/', campaign)).json()['data']['count'] == 6
@@ -513,7 +514,8 @@ def test_every_srd_spell_has_russian_full_description_and_casting_facts(world):
     call_command('seed_spells', verbosity=0)
     spells = list(SpellCatalogEntry.objects.filter(active=True, code__startswith='srd51-'))
     assert len(spells) == 319
-    assert sum(bool(spell.template['verified']) for spell in spells) == 15
+    from lab.data.spell_mechanics import EXTRA
+    assert sum(bool(spell.template['verified']) for spell in spells) == 15 + len(EXTRA)
     for spell in spells:
         rules = spell.template
         assert rules['description_language'] == 'ru'
@@ -628,3 +630,82 @@ def test_verified_fireball_uses_fourth_level_slot_and_records_rules(world):
     assert retry.status_code == 200 and retry.json()['data']['id'] == response.json()['data']['id']
     sheet.refresh_from_db()
     assert sheet.slots['4']['used'] == 1
+
+
+def test_extended_spell_presets_and_legacy_catalog_action(world):
+    dm, player, outsider, campaign, char, session = world
+    from django.core.management import call_command
+    from lab.data.spell_mechanics import EXTRA
+    from lab.services.dice import parse_formula
+    from lab.models import SpellCatalogEntry
+
+    call_command('seed_spells', verbosity=0)
+    for name, preset in EXTRA.items():
+        entry = SpellCatalogEntry.objects.get(name_en=name)
+        assert entry.template['verified'] and entry.template['dice'] == preset['dice']
+        parse_formula(preset['dice'])
+        if preset['upcast_dice']:
+            parse_formula(preset['upcast_dice'])
+    entry = SpellCatalogEntry.objects.get(name_en='Spiritual Weapon')
+    legacy = CharacterAbility.objects.create(
+        character=char, catalog_entry=entry, kind='spell', name=entry.name_ru,
+        level=2, resolution='automatic', dice='', ability='int',
+    )
+    call_command('seed_spells', verbosity=0)
+    legacy.refresh_from_db()
+    assert legacy.resolution == 'attack' and legacy.dice == '1d8'
+    sheet = sheet_for(char)
+    sheet.slots['3'] = {'max': 1, 'used': 0}
+    sheet.slots['4'] = {'max': 1, 'used': 0}
+    sheet.spell_ability = 'wis'
+    sheet.abilities['wis'] = 16
+    sheet.save()
+    with patch('lab.services.dice.secrets.randbelow', return_value=2):
+        result = post(client(player), scoped(f'/api/abilities/{legacy.pk}/use/', campaign), {'slot_level': 4})
+    assert result.status_code == 200, result.content
+    payload = result.json()['data']['payload']
+    assert payload['spell_save_dc'] == 13 and payload['spell_attack_bonus'] == 5
+    assert payload['roll']['total'] == 8
+    assert payload['damage']['total'] == 9  # 1d8 + modifier 3 + 1d8 every two levels
+    assert payload['slot_level'] == 4
+
+
+def test_catalog_reference_cast_has_dc_and_expends_slot(world):
+    dm, player, outsider, campaign, char, session = world
+    from lab.models import SpellCatalogEntry
+    entry = SpellCatalogEntry.objects.get(code='srd51-bane')
+    spell = post(client(player), scoped(f'/api/characters/{char.pk}/spells/catalog/', campaign), {'spell_id': entry.pk}).json()['data']
+    sheet = sheet_for(char)
+    sheet.slots['1'] = {'max': 1, 'used': 0}
+    sheet.save()
+    result = post(client(player), scoped(f'/api/abilities/{spell["id"]}/use/', campaign), {'slot_level': 1})
+    assert result.status_code == 200, result.content
+    payload = result.json()['data']['payload']
+    assert payload['spell_save_dc'] == 10 and payload['spell_attack_bonus'] == 2
+    assert payload['possible_saves'] == ['cha']
+    assert 'damage' not in payload and 'adjudication' in payload
+    sheet.refresh_from_db()
+    assert sheet.slots['1']['used'] == 1
+
+
+def test_deferred_spell_rolls_only_on_trigger_without_second_slot(world):
+    dm, player, outsider, campaign, char, session = world
+    entry = SpellCatalogEntry.objects.get(code='srd51-moonbeam')
+    spell = post(client(player), scoped(f'/api/characters/{char.pk}/spells/catalog/', campaign), {'spell_id': entry.pk}).json()['data']
+    sheet = sheet_for(char)
+    sheet.slots['2'] = {'max': 1, 'used': 0}
+    sheet.save()
+    url = scoped(f'/api/abilities/{spell["id"]}/use/', campaign)
+    assert post(client(player), url, {'trigger': True}).status_code == 400
+    first = post(client(player), url, {'slot_level': 2}).json()['data']['payload']
+    assert first['deferred'] and 'damage' not in first and first['trigger'] is False
+    with patch('lab.services.dice.secrets.randbelow', return_value=2):
+        second = post(client(player), url, {'trigger': True}, 'moonbeam-trigger').json()['data']['payload']
+    assert second['damage']['total'] == 6 and second['save']['success_damage'] == 3
+    sheet.refresh_from_db()
+    assert sheet.slots['2']['used'] == 1
+    assert second['source_cast_id'] and second['trigger'] is True
+    assert post(client(player), url, {'trigger': True}, 'moonbeam-trigger').json()['data']['payload'] == second
+    sheet.conditions = []
+    sheet.save()
+    assert post(client(player), url, {'trigger': True}, 'new-trigger').status_code == 400
