@@ -36,7 +36,6 @@ import {
   X,
   Radio,
   BookOpen,
-  ShieldCheck,
 } from "lucide-react";
 import { request, list, clearCsrf, ApiError, type Json } from "./api/client";
 import {
@@ -331,7 +330,6 @@ function Shell({ children }: { children: ReactNode }) {
     ["/master", "Стол мастера", Radio],
     ["/master/sheets", "Листы группы", BookOpen],
     ["/dm", "Управление кампанией", SlidersHorizontal],
-    ["/profile", "Мой профиль", UserRound],
   ] : [
     ["/", "Кампании", LayoutDashboard],
     ["/room", "Игровая комната", Radio],
@@ -377,7 +375,6 @@ function Shell({ children }: { children: ReactNode }) {
           </div>
           <ChevronDown size={14} />
         </div>
-        <div className="role-space"><ShieldCheck size={16}/><strong>Панель мастера</strong></div>
         <Link className="view-switch" to="/room" onClick={() => setMenu(false)}>Посмотреть как игрок</Link>
         <div className="nav-label">{a.masterMode ? "ВАША КАМПАНИЯ" : "МОИ ИНСТРУМЕНТЫ"}</div>
         <nav>
@@ -394,18 +391,6 @@ function Shell({ children }: { children: ReactNode }) {
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <div className="sidebar-note">
-            <div className="tiny-orbit">✦</div>
-            <strong>
-              Хорошей истории
-              <br />
-              нужен только повод.
-            </strong>
-            <p>Остальное создадите вы.</p>
-            <Link to={a.masterMode ? "/master" : "/room"}>
-              Открыть комнату <ArrowUpRight size={14} />
-            </Link>
-          </div>
           <div className="theme-control">
             <span>Оформление</span>
             <button aria-label="Переключить тему" onClick={a.toggleTheme}>

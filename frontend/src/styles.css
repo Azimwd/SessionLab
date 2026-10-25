@@ -554,43 +554,6 @@ select {
 .sidebar-bottom {
   margin-top: auto;
 }
-.sidebar-note {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 13px;
-  padding: 17px 15px;
-  margin-bottom: 22px;
-  position: relative;
-  overflow: hidden;
-}
-.tiny-orbit {
-  width: 30px;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--accent);
-  border-radius: 50%;
-  border: 1px solid #695cf525;
-  margin-bottom: 12px;
-}
-.sidebar-note strong {
-  font-size: 12px;
-  line-height: 1.75;
-  display: block;
-}
-.sidebar-note p {
-  font-size: 10px;
-  margin: 7px 0 13px;
-}
-.sidebar-note a {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--accent);
-  font-size: 10px;
-  font-weight: 700;
-}
 .theme-control {
   display: flex;
   align-items: center;

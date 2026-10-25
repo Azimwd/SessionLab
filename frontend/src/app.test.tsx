@@ -278,6 +278,10 @@ it('master landing has separate tools and can switch to player view', async()=>{
   fireEvent.click(screen.getByRole('button',{name:'Управлять'}));
   await screen.findByRole('heading',{name:'Входящие запросы'});
   expect(screen.getByRole('link',{name:'Листы группы'})).toBeVisible();
+  const sidebar = screen.getByRole('complementary');
+  expect(within(sidebar).queryByRole('link',{name:'Мой профиль'})).not.toBeInTheDocument();
+  expect(within(sidebar).queryByText('Панель мастера')).not.toBeInTheDocument();
+  expect(within(sidebar).queryByText(/Хорошей истории/)).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('link',{name:'Посмотреть как игрок'}));
   await screen.findByRole('heading',{name:'Игровая комната'});
   expect(screen.getByRole('link',{name:'Эффекты'})).toBeVisible();
