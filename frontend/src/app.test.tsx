@@ -39,6 +39,7 @@ let spellAvailable = false;
 let multipleSpells = false;
 let activeSession = true;
 let mutation: Record<string, unknown> | null = null;
+let sheetState: any = null;
 function mockTransport() {
   return vi
     .spyOn(globalThis, "fetch")
@@ -57,7 +58,11 @@ function mockTransport() {
         data = { count: 1, results: [campaign] };
       else if (url.startsWith('/room/events/')) data={count:0,results:[]};
       else if (url.startsWith('/room/')) data={revision:1,session:{id:1,name:'Первый шаг'},party:[],initiative:{version:0,running:false,round_number:0,current:null,entries:[]}};
-      else if (url.startsWith('/characters/1/sheet/')) data={id:1,character:1,version:1,abilities:{str:16,dex:14,con:12,int:10,wis:10,cha:14},skills:{},saves:[],armor_class:14,hp_current:10,hp_max:15,hp_temp:0,speed:30,initiative_bonus:0,spell_ability:'cha',slots:Object.fromEntries(Array.from({length:9},(_,i)=>[String(i+1),{max:2,used:0}])),conditions:[],death_successes:0,death_failures:0,inventory:'',notes:'',background:'',computed:{proficiency:2,modifiers:{str:3,dex:2,con:1,int:0,wis:0,cha:2},skills:{},saves:{str:5,dex:2,con:1,int:0,wis:0,cha:4},initiative:2,spell_attack:4,spell_dc:12}};
+      else if (url.startsWith('/characters/1/sheet/')) {
+        sheetState??={id:1,character:1,version:1,abilities:{str:16,dex:14,con:12,int:10,wis:10,cha:14},skills:{},saves:[],armor_class:14,hp_current:10,hp_max:15,hp_temp:0,speed:30,initiative_bonus:0,spell_ability:'cha',slots:Object.fromEntries(Array.from({length:9},(_,i)=>[String(i+1),{max:2,used:0}])),conditions:[],death_successes:0,death_failures:0,inventory:'',notes:'',background:'',computed:{proficiency:2,modifiers:{str:3,dex:2,con:1,int:0,wis:0,cha:2},skills:{},saves:{str:5,dex:2,con:1,int:0,wis:0,cha:4},initiative:2,spell_attack:4,spell_dc:12}};
+        if(init?.method==='PATCH'){const patch=JSON.parse(String(init.body));sheetState={...sheetState,...patch,version:sheetState.version+1};}
+        data=sheetState;
+      }
       else if (url.startsWith('/characters/1/abilities/')) data=spellAvailable?[{id:9,version:1,kind:'spell',name:'Три искры',description:'Три отдельных луча',ability:'cha',proficient:true,bonus:0,resolution:'attack',dice:'1d6',add_modifier:false,damage_type:'огонь',level:1,upcast_dice:'',roll_count:3,upcast_count:0,save_ability:'dex',casting_time:'1 действие',range:'60 футов',duration:'Мгновенно',concentration:false},...(multipleSpells?Array.from({length:9},(_,i)=>({id:i+20,version:1,kind:'spell',name:i===5?'Огненный шар':`Заклинание ${i}`,description:'Эффект по описанию',level:i===5?3:i%4,upcast_allowed:true,dice:'2d6',damage_type:'огонь',casting_time:'1 действие',range:'60 футов',duration:'Мгновенно'})):[])]:[];
       else if (url.startsWith('/spells/catalog/5/')) data={id:5,name_ru:'Исполнение желаний',level:9,rules:{school:'conjuration',classes:['Wizard'],verified:false,casting_time:'Действие',range:'На себя',duration:'Мгновенная',components:'В',description:'Желание меняет реальность.\n\nМожно повторить заклинание.',source_en:'Wish is the mightiest spell.'}};
       else if (url.startsWith('/spells/catalog/')) data={count:1,results:[{id:5,name_ru:'Огненный шар',name_en:'Fireball',level:3,rules:{school:'evocation',classes:['Wizard'],verified:true,casting_time:'1 действие',range:'150 футов',duration:'Мгновенно',description:'Взрыв огня'}}]};
@@ -178,6 +183,7 @@ beforeEach(() => {
   multipleSpells = false;
   activeSession = true;
   mutation = null;
+  sheetState = null;
   localStorage.clear();
   sessionStorage.clear();
   mockTransport();
@@ -307,7 +313,7 @@ it('sheet edits use real inputs and preserve a draft', async()=>{
   await screen.findByRole('tab',{name:'Характеристики'});
   fireEvent.click(screen.getByRole('tab',{name:'Характеристики'}));
   fireEvent.change(screen.getByRole('spinbutton',{name:'Сила'}),{target:{value:'18'}});
-  expect(screen.getByText('Есть несохранённые изменения. Сохраните их перед броском.')).toBeVisible();
+  expect(screen.getByText('Сохраним изменения автоматически…')).toBeVisible();
   expect(screen.getAllByRole('button',{name:'Проверка'})[0]).toBeDisabled();
   await waitFor(()=>expect(JSON.parse(sessionStorage.getItem('sl:sheet-draft:1:1:1')!).abilities.str).toBe(18));
 });
@@ -348,8 +354,38 @@ it('edits scores, saves, skill expertise and combat resources directly on the ov
   fireEvent.change(within(rail).getByRole('spinbutton',{name:'Значение: Сила'}),{target:{value:'18'}});
   fireEvent.change(screen.getByRole('spinbutton',{name:'Класс доспеха на обзоре'}),{target:{value:'16'}});
   expect(within(rail).getByRole('button',{name:'Бросить проверку: Сила'})).toBeDisabled();
-  fireEvent.click(screen.getByRole('button',{name:'Сохранить'}));
   await waitFor(()=>expect(mutation).toMatchObject({url:'/characters/1/sheet/?campaign=1',method:'PATCH',body:{abilities:{str:18},saves:['str'],skills:{perception:2},armor_class:16}}));
+  await waitFor(()=>expect(within(rail).getByRole('button',{name:'Бросить проверку: Сила'})).toBeEnabled());
+});
+it('edits conditions and notes on the overview and saves them automatically', async()=>{
+  mount('/sheet');
+  expect(await screen.findByRole('link',{name:'Комната'})).toHaveAttribute('href','/room');
+  await screen.findByRole('spinbutton',{name:'Класс доспеха на обзоре'});
+  expect(screen.queryByText('Можно изменить здесь')).not.toBeInTheDocument();
+  const conditionsSection=screen.getByText('Состояния').closest('details')!;
+  fireEvent.click(within(conditionsSection).getByText('Состояния'));
+  fireEvent.click(within(conditionsSection).getByRole('checkbox',{name:'Ослеплён'}));
+  fireEvent.change(screen.getByRole('textbox',{name:'Инвентарь на обзоре'}),{target:{value:'Верёвка'}});
+  fireEvent.change(screen.getByRole('textbox',{name:'Заметки на обзоре'}),{target:{value:'Найти проводника'}});
+  expect(screen.queryByRole('button',{name:'Сохранить'})).not.toBeInTheDocument();
+  await waitFor(()=>expect(mutation).toMatchObject({url:'/characters/1/sheet/?campaign=1',body:{conditions:['Ослеплён'],inventory:'Верёвка',notes:'Найти проводника'}}));
+  await waitFor(()=>expect(within(conditionsSection).getAllByText('Ослеплён').length).toBeGreaterThan(0));
+});
+it('keeps newer edits made while an automatic save is in flight', async()=>{
+  const original=vi.mocked(globalThis.fetch).getMockImplementation()!;
+  let release:(()=>void)|undefined;
+  vi.mocked(globalThis.fetch).mockImplementation((input,init)=>{
+    if(String(input).includes('/characters/1/sheet/')&&init?.method==='PATCH'&&!release)
+      return new Promise<Response>(resolve=>{release=()=>{void original(input,init).then(resolve);};});
+    return original(input,init);
+  });
+  mount('/sheet');
+  fireEvent.change(await screen.findByRole('textbox',{name:'Инвентарь на обзоре'}),{target:{value:'Факел'}});
+  await waitFor(()=>expect(release).toBeTypeOf('function'));
+  fireEvent.change(screen.getByRole('textbox',{name:'Заметки на обзоре'}),{target:{value:'Проверить склад'}});
+  release!();
+  await waitFor(()=>expect(mutation).toMatchObject({url:'/characters/1/sheet/?campaign=1',body:{version:2,inventory:'Факел',notes:'Проверить склад'}}));
+  await waitFor(()=>expect(screen.queryByText('Сохраним изменения автоматически…')).not.toBeInTheDocument());
 });
 it('restores spell slots from the overview with confirmation', async()=>{
   mount('/sheet');

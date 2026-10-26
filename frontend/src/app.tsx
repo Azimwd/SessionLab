@@ -426,7 +426,7 @@ function Shell({ children }: { children: ReactNode }) {
           <div className="breadcrumb">
             {a.masterMode ? 'Панель управления' : <select aria-label="Текущая кампания" value={a.cid} onChange={e=>a.selectCampaign(e.target.value)}>{!a.campaign&&<option value="">Нет игры</option>}{a.campaigns.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>}
           </div>
-          <nav className="header-nav" aria-label="Навигация по игре"><NavLink to="/" end>Игры</NavLink><NavLink to="/sheet">Лист</NavLink><NavLink to="/spells">Заклинания</NavLink><NavLink to="/effects">Эффекты</NavLink><NavLink to="/quests">Квесты</NavLink><NavLink to="/casino">Казино</NavLink>{a.campaign?.role==='dm'&&<NavLink to="/dm">Панель управления</NavLink>}</nav>
+          <nav className="header-nav" aria-label="Навигация по игре"><NavLink to="/" end>Игры</NavLink><NavLink to="/room">Комната</NavLink><NavLink to="/sheet">Лист</NavLink><NavLink to="/spells">Заклинания</NavLink><NavLink to="/effects">Эффекты</NavLink><NavLink to="/quests">Квесты</NavLink><NavLink to="/casino">Казино</NavLink>{a.campaign?.role==='dm'&&<NavLink to="/dm">Панель управления</NavLink>}</nav>
           <div className="topbar-right">
             {a.session && (
               <span className="session-live">

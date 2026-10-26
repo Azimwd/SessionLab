@@ -187,6 +187,7 @@ input[type="checkbox"] {
 }
 select {
   appearance: auto;
+  cursor: pointer;
 }
 .button {
   display: inline-flex;

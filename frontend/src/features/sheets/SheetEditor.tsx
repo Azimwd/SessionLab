@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Dice5, Save, RotateCcw, ArrowUpRight } from 'lucide-react';
+import { Dice5, RotateCcw, ArrowUpRight } from 'lucide-react';
 import { useApp, useData } from '../../app';
 import { request, type Json } from '../../api/client';
 import { Card, Button, Field, Badge, ErrorBox, Loading, Confirm, Modal } from '../../components/ui';
@@ -19,27 +19,42 @@ export default function SheetEditor({character}:{character:Json}) {
   const draftKey=`sl:sheet-draft:${a.user.id}:${a.cid}:${character.id}`;
   const [cached] = useState<Json|null>(()=>{try{return JSON.parse(sessionStorage.getItem(draftKey)||'null');}catch{return null;}});
   const [draft,setDraft]=useState<Json|null>(cached),[dirty,setDirty]=useState(!!cached),[tab,setTab]=useState('overview');
+  const draftRef=useRef<Json|null>(cached);
   useEffect(()=>{if(dirty && draft)sessionStorage.setItem(draftKey,JSON.stringify(draft));else sessionStorage.removeItem(draftKey);},[draftKey,dirty,draft]);
   const [mode,setMode]=useState('normal'),[visibility,setVisibility]=useState('public'),[amount,setAmount]=useState(1);
   const [result,setResult]=useState<Json|null>(null),[confirm,setConfirm]=useState('');
-  useEffect(()=>{if(query.data && !dirty)setDraft(structuredClone(query.data));},[query.data,dirty]);
+  useEffect(()=>{if(query.data && !dirty){const next=structuredClone(query.data);draftRef.current=next;setDraft(next);}},[query.data,dirty]);
   useEffect(()=>{if(!dirty)return;const fn=(e:BeforeUnloadEvent)=>{e.preventDefault();e.returnValue='';};window.addEventListener('beforeunload',fn);return()=>window.removeEventListener('beforeunload',fn);},[dirty]);
-  const save=useMutation({mutationFn:()=>request(`/characters/${character.id}/sheet/${suffix}`,'PATCH',{version:draft!.version,...Object.fromEntries(editable.map(k=>[k,draft![k]]))}),onSuccess:(r)=>{qc.setQueryData([`/characters/${character.id}/sheet/${suffix}`],r);setDraft(r);setDirty(false);a.refresh();a.notify('Лист сохранён');},onError:()=>query.refetch()});
+  const save=useMutation({mutationFn:(snapshot:Json)=>request(`/characters/${character.id}/sheet/${suffix}`,'PATCH',{version:snapshot.version,...Object.fromEntries(editable.map(k=>[k,snapshot[k]]))}),onSuccess:(r,snapshot)=>{
+    qc.setQueryData([`/characters/${character.id}/sheet/${suffix}`],r);
+    const current=draftRef.current!;
+    const changed=editable.some(key=>JSON.stringify(current[key])!==JSON.stringify(snapshot[key]));
+    const next=changed?{...current,version:r.version}:r;
+    draftRef.current=next;setDraft(next);setDirty(changed);a.refresh();
+  },onError:()=>query.refetch()});
+  const stale=!!(dirty&&draft&&query.data&&query.data.version!==draft.version);
+  const valid=!!draft&&Object.values(draft.abilities).every(v=>typeof v==='number'&&Number.isInteger(v)&&v>=1&&v<=30)
+    &&draft.hp_current>=0&&draft.hp_current<=draft.hp_max&&draft.hp_max>=1
+    &&Object.values(draft.slots).every(v=>{const slot=v as Json;return Number.isInteger(slot.max)&&Number.isInteger(slot.used)&&slot.used>=0&&slot.used<=slot.max&&slot.max<=20;});
+  useEffect(()=>{
+    if(!dirty||!draft||!valid||stale||save.isPending||save.isError)return;
+    const timer=window.setTimeout(()=>save.mutate(draftRef.current!),650);
+    return()=>window.clearTimeout(timer);
+  },[draft,dirty,valid,stale,save.isPending,save.isError]);
   const roll=useMutation({mutationFn:(body:Json)=>request(`/room/rolls/${suffix}`,'POST',{character:character.id,mode,visibility,...body}),onSuccess:(r)=>{setResult(r);a.refresh();}});
   const cast=useMutation({mutationFn:({item,level,trigger=false}:{item:Json;level:number;trigger?:boolean})=>request(`/abilities/${item.id}/use/${suffix}`,'POST',{slot_level:level,trigger,mode,visibility}),onSuccess:(r)=>{setResult(r);a.refresh();actions.refetch();},onError:(e)=>a.notify(e.message)});
   const resource=useMutation({mutationFn:(verb:string)=>request(`/characters/${character.id}/resources/${suffix}`,'POST',{action:verb,amount,version:query.data?.version}),onSuccess:()=>{a.refresh();setConfirm('');}});
-  const set=(key:string,value:unknown)=>{setDraft(d=>({...d!,[key]:value}));setDirty(true);};
+  const set=(key:string,value:unknown)=>{const next={...draftRef.current!,[key]:value};draftRef.current=next;setDraft(next);setDirty(true);if(save.isError)save.reset();};
   if(query.isPending || !draft) return query.error?<ErrorBox error={query.error} retry={()=>query.refetch()}/>:<Loading/>;
   if(query.error)return <ErrorBox error={query.error} retry={()=>query.refetch()}/>;
   const sh=query.data!, busy=roll.isPending||cast.isPending||resource.isPending;
   const blocked=dirty||!a.sid||busy;
-  const disabledReason=dirty?'Сохраните изменения листа перед применением.':!a.sid?'В кампании нет активной сессии. Мастер должен начать сессию.':busy?'Дождитесь завершения предыдущего действия.':'';
-  const stale=dirty && sh.version!==draft.version;
+  const disabledReason=dirty?'Изменения листа сохраняются, подождите немного.':!a.sid?'В кампании нет активной сессии. Мастер должен начать сессию.':busy?'Дождитесь завершения предыдущего действия.':'';
   const rollCheck=(kind:string,key?:string)=>roll.mutate({kind,key});
   return <><div className="sheet-hero classic-sheet-identity"><div><span className="eyebrow">ЛИСТ ПЕРСОНАЖА</span><h1>{character.name}</h1></div><div className="classic-identity-grid"><div><small>Класс</small><strong>{character.character_class || 'Не указан'}</strong></div><div><small>Вид</small><strong>{character.species || 'Не указан'}</strong></div><div><small>Уровень</small><strong>{character.level}</strong></div><div><small>Мастерство</small><strong>{signed(sh.computed.proficiency)}</strong></div></div></div>
     <div className="sheet-toolbar"><Field label="Режим броска"><select value={mode} onChange={e=>setMode(e.target.value)}><option value="normal">Обычный</option><option value="advantage">Преимущество</option><option value="disadvantage">Помеха</option></select></Field><Field label="Результаты видны"><select value={visibility} onChange={e=>setVisibility(e.target.value)}><option value="public">Всей комнате</option><option value="dm">Только мастеру</option></select></Field><Link className="button secondary" to={a.masterMode?'/master':'/room'}>Общий стол <ArrowUpRight size={16}/></Link></div>
     {!a.sid && <p className="save-callout">Лист можно заполнять сейчас. Броски доступны после начала сессии.</p>}
-    {dirty && <div className={`save-bar ${stale?'conflict':''}`} role="status"><span>{stale?'Лист изменился в другом окне. Загрузите актуальную версию перед новым редактированием.':'Есть несохранённые изменения. Сохраните их перед броском.'}</span><Button disabled={save.isPending||stale} onClick={()=>save.mutate()}><Save size={16}/> Сохранить</Button><Button variant="secondary" onClick={()=>setConfirm('discard')}>Отменить правки</Button></div>}
+    {dirty && <div className={`save-bar ${stale?'conflict':''}`} role="status"><span>{stale?'Лист изменился в другом окне. Загрузите актуальную версию.':save.isError?'Не удалось сохранить. Правки остались на этом устройстве.':!valid?'Проверьте значения листа: характеристики, хиты и ячейки.':save.isPending?'Сохраняем изменения…':'Сохраним изменения автоматически…'}</span>{save.isError&&!stale&&<Button variant="secondary" onClick={()=>save.mutate(draftRef.current!)}>Повторить</Button>}{stale&&<Button variant="secondary" onClick={()=>setConfirm('discard')}>Загрузить актуальный лист</Button>}</div>}
     {(save.error||roll.error||cast.error||resource.error) && <ErrorBox error={save.error||roll.error||cast.error||resource.error}/>}
     <div className="classic-sheet-layout">
       <SheetRail sheet={sh} draft={draft} blocked={blocked} onRoll={(kind,key)=>rollCheck(kind,key)} onEdit={()=>setTab('stats')} onChange={set}/>
@@ -54,8 +69,7 @@ export default function SheetEditor({character}:{character:Json}) {
     {tab==='notes' && <Card><p className="save-callout">Эти записи видны только владельцу персонажа и мастеру.</p>{[['inventory','Инвентарь и снаряжение'],['background','Предыстория и особенности'],['notes','Личные заметки']].map(([key,label])=><Field key={key} label={label}><textarea rows={6} maxLength={20000} value={draft[key]} onChange={e=>set(key,e.target.value)} placeholder="Можно писать свободным текстом…"/></Field>)}</Card>}
       </div>
     </div>
-    {dirty && <div className="actions end spacer"><Button disabled={save.isPending||stale} onClick={()=>save.mutate()}><Save size={16}/> Сохранить лист</Button></div>}
     {result && <Modal title="Результат действия" onClose={()=>setResult(null)}><RollResult large event={result}/><Button variant="secondary" onClick={()=>setResult(null)}>Продолжить</Button></Modal>}
-    {confirm && <Confirm title={confirm==='discard'?'Отменить несохранённые правки?':'Восстановить все ячейки?'} text={confirm==='discard'?'Загрузится последняя сохранённая версия листа.':'Используйте после отдыха или по решению мастера. В журнале появится запись.'} busy={resource.isPending} onClose={()=>setConfirm('')} onConfirm={()=>{if(confirm==='discard'){setDirty(false);setDraft(structuredClone(sh));setConfirm('');save.reset();}else resource.mutate('restore_slots');}}/>}
+    {confirm && <Confirm title={confirm==='discard'?'Отменить несохранённые правки?':'Восстановить все ячейки?'} text={confirm==='discard'?'Загрузится последняя сохранённая версия листа.':'Используйте после отдыха или по решению мастера. В журнале появится запись.'} busy={resource.isPending} onClose={()=>setConfirm('')} onConfirm={()=>{if(confirm==='discard'){const next=structuredClone(sh);draftRef.current=next;setDirty(false);setDraft(next);setConfirm('');save.reset();}else resource.mutate('restore_slots');}}/>}
   </>;
 }

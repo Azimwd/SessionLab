@@ -5,7 +5,7 @@ import { Badge, Button, Card, Confirm, Field, Modal } from '../../components/ui'
 import type { Json } from '../../api/client';
 import AbilityEditor from './AbilityEditor';
 import SpellCatalog from './SpellCatalog';
-import { abilities, skills, modifier, signed } from './constants';
+import { abilities, skills, conditions, modifier, signed } from './constants';
 
 export function SheetRail({sheet,draft,blocked,onRoll,onEdit,onChange}: {
   sheet: Json;
@@ -33,7 +33,7 @@ export function SheetRail({sheet,draft,blocked,onRoll,onEdit,onChange}: {
       <input type="checkbox" aria-label={`Владение спасброском: ${label}`} checked={draft.saves.includes(key)} onChange={e=>onChange('saves',e.target.checked?[...draft.saves,key]:draft.saves.filter((v:string)=>v!==key))}/>
       <span>{label}</span><b>{signed(saveBonus(key))}</b><button aria-label={`Бросить спасбросок: ${label}`} disabled={blocked} onClick={()=>onRoll('save',key)}><Dice5 size={15}/></button>
     </div>)}</div>
-    <details className="classic-rail-section classic-skill-list" open><summary>Навыки <span>18 · нажмите на кружок для владения</span></summary>
+    <details className="classic-rail-section classic-skill-list" open><summary>Навыки</summary>
       {Object.entries(skills).map(([key,[label,ability]])=><div className="classic-rail-row" key={key}>
         <button className={`classic-skill-level level-${draft.skills[key]||0}`} onClick={()=>cycleSkill(key)} aria-label={`Владение навыком: ${label} — ${['нет','владение','экспертиза'][draft.skills[key]||0]}`} title="Нажатия: нет → владение → экспертиза → нет">{['○','●','◆'][draft.skills[key]||0]}</button>
         <span>{label}</span><b>{signed(skillBonus(key,ability))}</b><button aria-label={`Бросить навык: ${label}`} disabled={blocked} onClick={()=>onRoll('skill',key)}><Dice5 size={15}/></button>
@@ -76,9 +76,10 @@ export function SheetOverview({sheet,draft,actions,characterId,disabled,busy,res
   const slots=Object.entries(sheet.slots).filter(([,value])=>(value as Json).max>0);
   const setNumber=(key:string)=>(e:React.ChangeEvent<HTMLInputElement>)=>onChange(key,Number(e.target.value));
   return <div className="classic-overview">
-    <div className="classic-overview-top"><Card><div className="section-title"><h2>Боевые показатели</h2><Badge>Можно изменить здесь</Badge></div>
+    <div className="classic-overview-top"><Card><div className="section-title"><h2>Боевые показатели</h2></div>
       <div className="classic-combat-values"><Field label="Класс доспеха"><input aria-label="Класс доспеха на обзоре" type="number" min={0} max={50} value={draft.armor_class} onChange={setNumber('armor_class')}/></Field><Field label="Бонус инициативы"><input aria-label="Бонус инициативы на обзоре" type="number" min={-30} max={30} value={draft.initiative_bonus} onChange={setNumber('initiative_bonus')}/></Field><Field label="Скорость, футы"><input aria-label="Скорость на обзоре" type="number" min={0} max={1000} value={draft.speed} onChange={setNumber('speed')}/></Field><Field label="Бонус мастерства" hint="Пусто — по уровню"><input aria-label="Бонус мастерства на обзоре" type="number" min={0} max={15} value={draft.proficiency_override??''} placeholder={String(sheet.computed.proficiency)} onChange={e=>onChange('proficiency_override',e.target.value===''?null:Number(e.target.value))}/></Field></div>
-      <div className="classic-combat-footer"><Button variant="secondary" disabled={disabled} onClick={()=>onRoll('initiative')}><Dice5 size={16}/> Инициатива {signed(modifier(draft.abilities.dex)+draft.initiative_bonus)}</Button><small>Состояния: {draft.conditions.length?draft.conditions.join(', '):'нет'}</small></div>
+      <div className="classic-combat-footer"><Button variant="secondary" disabled={disabled} onClick={()=>onRoll('initiative')}><Dice5 size={16}/> Инициатива {signed(modifier(draft.abilities.dex)+draft.initiative_bonus)}</Button></div>
+      <details className="classic-conditions"><summary><span>Состояния</span><span className="classic-active-conditions">{draft.conditions.length?draft.conditions.map((c:string)=><Badge key={c}>{c}</Badge>):<small className="muted">Нет · нажмите, чтобы отметить</small>}</span></summary><div className="condition-picker">{conditions.map(c=><label key={c} className={draft.conditions.includes(c)?'selected':''}><input type="checkbox" checked={draft.conditions.includes(c)} onChange={e=>onChange('conditions',e.target.checked?[...draft.conditions,c]:draft.conditions.filter((v:string)=>v!==c))}/>{c}</label>)}</div></details>
     </Card><Card><div className="section-title"><h2>Магия</h2><Button variant="secondary" disabled={restoreDisabled} onClick={onRestore}><RotateCcw size={15}/> Сбросить ячейки</Button></div>
       <div className="classic-magic-values"><span>Атака <b>{signed(sheet.computed.spell_attack)}</b></span><span>СЛ спасброска <b>{sheet.computed.spell_dc}</b></span></div>
       <div className="classic-slot-pips">{slots.length?slots.map(([level,value])=><span key={level} title={`Ячейки ${level} уровня: ${(value as Json).max-(value as Json).used} из ${(value as Json).max}`}>{level} ур. <b>{(value as Json).max-(value as Json).used}/{(value as Json).max}</b></span>):<small className="muted">Ячейки не настроены</small>}</div>
@@ -93,6 +94,7 @@ export function SheetOverview({sheet,draft,actions,characterId,disabled,busy,res
       <div className="classic-action-scroll" aria-label="Заклинания персонажа">{spells.map((item,index)=><div key={item.id}>{(index===0||spells[index-1].level!==item.level)&&<div className="classic-action-group">{item.level===0?'Заговоры':`${item.level} круг`}</div>}{showAction(item)}</div>)}{!spells.length&&<p className="muted">{spellSearch||spellLevel?'Заклинаний по фильтру нет.':'Добавьте заклинание из каталога или создайте своё.'}</p>}</div>
       <Button variant="ghost" onClick={()=>onTab('spells')}>Ячейки и полный раздел <ChevronRight size={15}/></Button>
     </Card></div>
+    <Card className="classic-overview-notes"><div className="section-title"><h2>Инвентарь и заметки</h2><Button variant="ghost" onClick={()=>onTab('notes')}>Полный раздел <ChevronRight size={15}/></Button></div><div className="classic-notes-grid"><Field label="Инвентарь"><textarea aria-label="Инвентарь на обзоре" rows={3} maxLength={20000} placeholder="Предметы и снаряжение…" value={draft.inventory} onChange={e=>onChange('inventory',e.target.value)}/></Field><Field label="Заметки"><textarea aria-label="Заметки на обзоре" rows={3} maxLength={20000} placeholder="Личные записи…" value={draft.notes} onChange={e=>onChange('notes',e.target.value)}/></Field></div></Card>
     {editor&&<AbilityEditor characterId={characterId} initial={editor.item} kind={editor.kind} spellAbility={sheet.spell_ability} onClose={()=>setEditor(null)}/>}
     {catalog&&<SpellCatalog characterId={characterId} existing={actions} onClose={()=>setCatalog(false)}/>}
     {detail&&<Modal title={detail.name} onClose={()=>setDetail(null)} wide><div className="classic-action-detail"><div className="inline-tags"><Badge>{detail.kind==='spell'?(detail.level?`${detail.level} круг`:'Заговор'):'Атака'}</Badge>{detail.dice&&<Badge>{detail.dice} · {detail.damage_type}</Badge>}</div><p className="muted">{[detail.casting_time,detail.range,detail.duration].filter(Boolean).join(' · ')}</p><p className="preserve-lines">{detail.description||'Описание для этого действия не заполнено.'}</p><div className="actions"><Button variant="secondary" onClick={()=>{setEditor({kind:detail.kind,item:detail});setDetail(null);}}>Редактировать</Button><Button variant="ghost" onClick={()=>setDetail(null)}>Закрыть</Button></div></div></Modal>}
