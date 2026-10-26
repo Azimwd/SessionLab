@@ -40,6 +40,9 @@ let multipleSpells = false;
 let activeSession = true;
 let mutation: Record<string, unknown> | null = null;
 let sheetState: any = null;
+let roomHasActors = false;
+let roomTableVisible = true;
+let roomCharacterVisible = true;
 function mockTransport() {
   return vi
     .spyOn(globalThis, "fetch")
@@ -57,7 +60,19 @@ function mockTransport() {
       } else if (url === "/campaigns/")
         data = { count: 1, results: [campaign] };
       else if (url.startsWith('/room/events/')) data={count:0,results:[]};
-      else if (url.startsWith('/room/')) data={revision:1,session:{id:1,name:'Первый шаг'},party:[],initiative:{version:0,running:false,round_number:0,current:null,entries:[]}};
+      else if (url.startsWith('/room/table-visibility/')) {
+        const payload=JSON.parse(String(init?.body||'{}'));
+        if(payload.scope==='table')roomTableVisible=payload.visible;
+        if(payload.scope==='character')roomCharacterVisible=payload.visible;
+        data={scope:payload.scope,visible:payload.visible};
+      }
+      else if (url.startsWith('/room/')) {
+        const master=!url.includes('view=player');
+        const person={id:1,name:'Мира',owner:1,owner_name:'Мира',kind:'player',folder:null,table_visible:roomCharacterVisible,character_class:'Бард',level:3,hp_current:10,hp_max:15,hp_temp:0,armor_class:14,conditions:[],speed:30,initiative:2,abilities:{str:16,dex:14}};
+        const npc={...person,id:2,name:'Гоблин',kind:'npc',folder:2,owner_name:'Мастер',abilities:{str:8,dex:14}};
+        data={revision:1,session:{id:1,name:'Первый шаг'},party:roomHasActors&&(master||roomTableVisible&&roomCharacterVisible)?[person]:[],npcs:roomHasActors&&master?[npc]:[],own_characters:roomHasActors?[{id:1,name:'Мира',owner:1}]:[],table_visible_to_players:roomTableVisible,initiative:{version:0,running:false,round_number:0,current:null,entries:[]}};
+      }
+      else if (url.startsWith('/character-folders/')) data={count:2,results:[{id:2,name:'Противники',owner:1},{id:3,name:'NPC',owner:1}]};
       else if (url.startsWith('/characters/1/sheet/')) {
         sheetState??={id:1,character:1,version:1,abilities:{str:16,dex:14,con:12,int:10,wis:10,cha:14},skills:{},saves:[],armor_class:14,hp_current:10,hp_max:15,hp_temp:0,speed:30,initiative_bonus:0,spell_ability:'cha',slots:Object.fromEntries(Array.from({length:9},(_,i)=>[String(i+1),{max:2,used:0}])),conditions:[],death_successes:0,death_failures:0,inventory:'',notes:'',background:'',computed:{proficiency:2,modifiers:{str:3,dex:2,con:1,int:0,wis:0,cha:2},skills:{},saves:{str:5,dex:2,con:1,int:0,wis:0,cha:4},initiative:2,spell_attack:4,spell_dc:12}};
         if(init?.method==='PATCH'){const patch=JSON.parse(String(init.body));sheetState={...sheetState,...patch,version:sheetState.version+1};}
@@ -184,6 +199,9 @@ beforeEach(() => {
   activeSession = true;
   mutation = null;
   sheetState = null;
+  roomHasActors = false;
+  roomTableVisible = true;
+  roomCharacterVisible = true;
   localStorage.clear();
   sessionStorage.clear();
   mockTransport();
@@ -307,6 +325,30 @@ it('player cannot enter master route by URL', async()=>{
   await screen.findByRole('heading',{name:'Игровая комната'});
   await waitFor(()=>expect(screen.getByRole('heading',{name:'Игровая комната'})).toBeVisible());
   expect(screen.queryByRole('link',{name:'Листы группы'})).not.toBeInTheDocument();
+});
+it('lets a master filter table cards by folder and hide a character without taking away their dice', async()=>{
+  campaign.role='dm';roomHasActors=true;
+  mount('/master');
+  fireEvent.change(await screen.findByRole('combobox',{name:'Папка за столом'}),{target:{value:'2'}});
+  expect(screen.getByRole('heading',{name:'Гоблин'})).toBeInTheDocument();
+  expect(within(screen.getByRole('heading',{name:'Гоблин'}).closest('.party-card') as HTMLElement).getByText(/Инициатива/)).toBeInTheDocument();
+  fireEvent.change(screen.getByRole('combobox',{name:'Папка за столом'}),{target:{value:'players'}});
+  fireEvent.click(screen.getByRole('button',{name:'Скрыть Мира игрокам'}));
+  await waitFor(()=>expect(mutation).toMatchObject({url:'/room/table-visibility/?campaign=1',body:{scope:'character',character:1,visible:false}}));
+  fireEvent.click(screen.getByRole('link',{name:'Посмотреть как игрок'}));
+  await screen.findByRole('heading',{name:'Игровая комната'});
+  await waitFor(()=>expect(screen.queryByRole('heading',{name:'Мира'})).not.toBeInTheDocument());
+  expect(screen.queryByRole('combobox',{name:'Папка за столом'})).not.toBeInTheDocument();
+  expect(screen.getByRole('option',{name:'Мира'})).toBeInTheDocument();
+});
+it('lets a master hide the entire table from player view', async()=>{
+  campaign.role='dm';roomHasActors=true;
+  mount('/master');
+  fireEvent.click(await screen.findByRole('button',{name:'Скрыть блок от игроков'}));
+  await waitFor(()=>expect(mutation).toMatchObject({url:'/room/table-visibility/?campaign=1',body:{scope:'table',visible:false}}));
+  fireEvent.click(screen.getByRole('link',{name:'Посмотреть как игрок'}));
+  expect(await screen.findByText('Мастер скрыл отображение за столом')).toBeInTheDocument();
+  expect(screen.queryByRole('heading',{name:'Мира'})).not.toBeInTheDocument();
 });
 it('sheet edits use real inputs and preserve a draft', async()=>{
   mount('/sheet');

@@ -44,6 +44,7 @@ class Campaign(Timestamped):
     )
     invite_code = models.CharField(max_length=64, unique=True, default=invite_code)
     settings = models.JSONField(default=default_settings)
+    table_visible_to_players = models.BooleanField(default=True)
 
     def __str__(self):
         return self.name
@@ -86,6 +87,7 @@ class Character(Timestamped):
     description = models.TextField(blank=True)
     avatar = models.URLField(blank=True)
     active = models.BooleanField(default=True)
+    table_visible = models.BooleanField(default=True)
     folder = models.ForeignKey('CharacterFolder', on_delete=models.SET_NULL, null=True, blank=True, related_name='characters')
 
     class Meta:

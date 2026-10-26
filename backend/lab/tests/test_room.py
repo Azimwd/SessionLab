@@ -60,6 +60,44 @@ def test_folders_permissions_and_archived_character(world):
     assert not char.active and client(player).get(scoped(f'/api/characters/{char.id}/', campaign)).status_code == 404
 
 
+def test_master_room_folders_and_private_table_visibility(world):
+    dm, player, outsider, campaign, char, session = world
+    Membership.objects.create(campaign=campaign, user=outsider)
+    npcs = CharacterFolder.objects.create(campaign=campaign, owner=dm, name='NPC')
+    enemies = CharacterFolder.objects.create(campaign=campaign, owner=dm, name='Противники')
+    goblin = Character.objects.create(campaign=campaign, owner=dm, name='Гоблин', kind='npc', folder=enemies)
+    Character.objects.create(campaign=campaign, owner=dm, name='Торговец', kind='npc', folder=npcs)
+    sheet_for(goblin).save()
+    url = scoped('/api/room/', campaign)
+    table = scoped('/api/room/table-visibility/', campaign)
+    master = client(dm).get(url).json()['data']
+    assert {row['folder'] for row in master['npcs']} == {npcs.id, enemies.id}
+    assert master['npcs'][0]['abilities'] and master['party'][0]['id'] == char.id
+    public = client(outsider).get(url).json()['data']
+    assert public['npcs'] == [] and len(public['party']) == 1
+    assert 'abilities' not in public['party'][0] and 'folder' not in public['party'][0]
+    assert post(client(player), table, {'scope':'table','visible':False}).status_code == 403
+    assert post(client(outsider), table, {'scope':'character','character':char.id,'visible':False}).status_code == 403
+
+    key = 'hide-entire-table-1'
+    response = post(client(dm), table, {'scope':'table','visible':False}, key)
+    assert response.status_code == 200
+    assert post(client(dm), table, {'scope':'table','visible':False}, key).json() == response.json()
+    assert client(outsider).get(url).json()['data']['party'] == []
+    assert client(dm).get(url).json()['data']['party'][0]['id'] == char.id
+    assert client(dm).get(url+'&view=player').json()['data']['party'] == []
+    assert post(client(dm), table, {'scope':'table','visible':True}).status_code == 200
+
+    assert post(client(dm), table, {'scope':'character','character':char.id,'visible':False}).status_code == 200
+    assert client(outsider).get(url).json()['data']['party'] == []
+    owned = client(player).get(url).json()['data']
+    assert owned['party'] == [] and owned['own_characters'] == [{'id':char.id,'name':char.name,'owner':player.id}]
+    assert client(dm).get(url).json()['data']['party'][0]['table_visible'] is False
+    assert post(client(dm), table, {'scope':'character','character':goblin.id,'visible':'false'}).status_code == 400
+    assert post(client(dm), table, {'scope':'character','character':char.id,'visible':True}).status_code == 200
+    assert len(client(outsider).get(url).json()['data']['party']) == 1
+
+
 def test_master_starts_bulk_initiative_and_broadcasts_rolls(world):
     dm, player, outsider, campaign, char, session = world
     npc = Character.objects.create(campaign=campaign, owner=dm, name='Гоблин', kind='npc')

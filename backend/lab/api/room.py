@@ -88,6 +88,7 @@ class RoomView(APIView):
         s = c.sessions.filter(status="active").first()
         party = []
         npcs = []
+        own_characters = []
         for char in (
             Character.objects.filter(
                 campaign=c,
@@ -95,13 +96,25 @@ class RoomView(APIView):
                 owner__membership__campaign=c,
                 owner__membership__active=True,
             )
-            .select_related("sheet", "owner")
+            .select_related("sheet", "owner", "folder")
             .order_by("name")
         ):
             try:
                 sh = char.sheet
             except CharacterSheet.DoesNotExist:
                 sh = None
+            if char.kind == 'player' and char.owner_id == request.user.id:
+                own_characters.append({'id': char.id, 'name': char.name, 'owner': char.owner_id})
+            if not dm and (not c.table_visible_to_players or not char.table_visible):
+                continue
+            details = {
+                'kind': char.kind,
+                'folder': char.folder_id,
+                'table_visible': char.table_visible,
+                'speed': sh.speed if sh else 30,
+                'initiative': computed(sh)['initiative'] if sh else 0,
+                'abilities': sh.abilities if sh else {},
+            } if dm else {}
             (npcs if char.kind == 'npc' else party).append(
                 {
                     "id": char.id,
@@ -115,6 +128,7 @@ class RoomView(APIView):
                     "hp_temp": sh.hp_temp if sh else 0,
                     "armor_class": sh.armor_class if sh else 10,
                     "conditions": sh.conditions if sh else [],
+                    **details,
                 }
             )
         tracker = InitiativeTracker.objects.filter(session=s).first() if s else None
@@ -124,10 +138,37 @@ class RoomView(APIView):
                 "session": {"id": s.id, "name": s.name} if s else None,
                 "party": party,
                 "npcs": npcs if dm else [],
+                "own_characters": own_characters,
+                "table_visible_to_players": c.table_visible_to_players,
                 "initiative": tracker_data(tracker, dm),
                 "role": "dm" if is_dm(c, request.user) else "player",
             }
         )
+
+
+class RoomTableVisibility(APIView):
+    @extend_schema(request=OpenApiTypes.OBJECT, responses=OpenApiTypes.OBJECT)
+    def post(self, request):
+        def op(c):
+            visible = request.data.get('visible')
+            if type(visible) is not bool:
+                raise ValidationError('visible: boolean')
+            scope = request.data.get('scope')
+            if scope == 'table':
+                c.table_visible_to_players = visible
+                c.save(update_fields=['table_visible_to_players', 'updated_at'])
+                return {'scope': 'table', 'visible': visible}
+            if scope == 'character':
+                pk = request.data.get('character')
+                if type(pk) is not int:
+                    raise ValidationError('Укажите персонажа')
+                char = get_object_or_404(Character, pk=pk, campaign=c, active=True)
+                char.table_visible = visible
+                char.save(update_fields=['table_visible', 'updated_at'])
+                return {'scope': 'character', 'character': char.id, 'visible': visible}
+            raise ValidationError('Неизвестная настройка стола')
+
+        return mutate(request, None, op, dm=True)
 
 
 class RoomEvents(APIView):
