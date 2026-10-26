@@ -21,3 +21,4 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
 );
 
 import "./features/sheets/sheets.css";
+import "./features/sheets/classic.css";

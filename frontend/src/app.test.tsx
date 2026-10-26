@@ -319,6 +319,21 @@ it('uses a saved spell through the API with one click and renders separate rolls
   await waitFor(()=>expect(screen.getByText('Сумма результатов: 6')).toBeVisible());
   expect(screen.getAllByText(/Бросок [123]/)).toHaveLength(3);
 });
+it('keeps hit controls visible and casts a spell from the classic overview', async()=>{
+  spellAvailable=true;
+  mount('/sheet');
+  await screen.findByRole('tab',{name:'Обзор'});
+  expect(screen.getByRole('button',{name:'Урон'})).toBeVisible();
+  expect(screen.getByRole('button',{name:'Лечение'})).toBeVisible();
+  expect(screen.getByRole('button',{name:'Временные хиты'})).toBeVisible();
+  expect(screen.getByRole('tab',{name:'Атаки'})).toBeVisible();
+  expect(screen.getByRole('tab',{name:'Заклинания'})).toBeVisible();
+  fireEvent.click(await screen.findByRole('button',{name:'Применить Три искры'}));
+  await waitFor(()=>expect(mutation).toMatchObject({url:'/abilities/9/use/?campaign=1',body:{slot_level:1}}));
+  fireEvent.click(screen.getByRole('button',{name:'Продолжить'}));
+  fireEvent.click(screen.getByRole('tab',{name:'Заклинания'}));
+  expect(screen.getByRole('button',{name:'Урон'})).toBeVisible();
+});
 it('explains why a spell cannot be applied without an active session', async()=>{
   spellAvailable=true;
   activeSession=false;
