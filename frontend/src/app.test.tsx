@@ -36,6 +36,7 @@ const campaign = {
 let authenticated = true;
 let activeRound = false;
 let spellAvailable = false;
+let multipleSpells = false;
 let activeSession = true;
 let mutation: Record<string, unknown> | null = null;
 function mockTransport() {
@@ -57,7 +58,7 @@ function mockTransport() {
       else if (url.startsWith('/room/events/')) data={count:0,results:[]};
       else if (url.startsWith('/room/')) data={revision:1,session:{id:1,name:'Первый шаг'},party:[],initiative:{version:0,running:false,round_number:0,current:null,entries:[]}};
       else if (url.startsWith('/characters/1/sheet/')) data={id:1,character:1,version:1,abilities:{str:16,dex:14,con:12,int:10,wis:10,cha:14},skills:{},saves:[],armor_class:14,hp_current:10,hp_max:15,hp_temp:0,speed:30,initiative_bonus:0,spell_ability:'cha',slots:Object.fromEntries(Array.from({length:9},(_,i)=>[String(i+1),{max:2,used:0}])),conditions:[],death_successes:0,death_failures:0,inventory:'',notes:'',background:'',computed:{proficiency:2,modifiers:{str:3,dex:2,con:1,int:0,wis:0,cha:2},skills:{},saves:{str:5,dex:2,con:1,int:0,wis:0,cha:4},initiative:2,spell_attack:4,spell_dc:12}};
-      else if (url.startsWith('/characters/1/abilities/')) data=spellAvailable?[{id:9,version:1,kind:'spell',name:'Три искры',description:'Три отдельных луча',ability:'cha',proficient:true,bonus:0,resolution:'attack',dice:'1d6',add_modifier:false,damage_type:'огонь',level:1,upcast_dice:'',roll_count:3,upcast_count:0,save_ability:'dex',casting_time:'1 действие',range:'60 футов',duration:'Мгновенно',concentration:false}]:[];
+      else if (url.startsWith('/characters/1/abilities/')) data=spellAvailable?[{id:9,version:1,kind:'spell',name:'Три искры',description:'Три отдельных луча',ability:'cha',proficient:true,bonus:0,resolution:'attack',dice:'1d6',add_modifier:false,damage_type:'огонь',level:1,upcast_dice:'',roll_count:3,upcast_count:0,save_ability:'dex',casting_time:'1 действие',range:'60 футов',duration:'Мгновенно',concentration:false},...(multipleSpells?Array.from({length:9},(_,i)=>({id:i+20,version:1,kind:'spell',name:i===5?'Огненный шар':`Заклинание ${i}`,description:'Эффект по описанию',level:i===5?3:i%4,upcast_allowed:true,dice:'2d6',damage_type:'огонь',casting_time:'1 действие',range:'60 футов',duration:'Мгновенно'})):[])]:[];
       else if (url.startsWith('/spells/catalog/5/')) data={id:5,name_ru:'Исполнение желаний',level:9,rules:{school:'conjuration',classes:['Wizard'],verified:false,casting_time:'Действие',range:'На себя',duration:'Мгновенная',components:'В',description:'Желание меняет реальность.\n\nМожно повторить заклинание.',source_en:'Wish is the mightiest spell.'}};
       else if (url.startsWith('/spells/catalog/')) data={count:1,results:[{id:5,name_ru:'Огненный шар',name_en:'Fireball',level:3,rules:{school:'evocation',classes:['Wizard'],verified:true,casting_time:'1 действие',range:'150 футов',duration:'Мгновенно',description:'Взрыв огня'}}]};
       else if (url.startsWith('/abilities/9/use/')) data={id:100,kind:'ability',character:1,actor_name:'Мира',created_at:new Date().toISOString(),visibility:'public',payload:{label:'Три искры',character_name:'Мира',kind:'spell',slot_level:1,resolution:'attack',damage_type:'огонь',parts:[1,2,3].map(n=>({roll:{formula:'1d20+4',values:[n],chosen:n,modifier:4,total:n+4,mode:'normal'},damage:{formula:'1d6',terms:[{sign:1,sides:6,values:[n]}],total:n}})),total_damage:6}};
@@ -174,6 +175,7 @@ beforeEach(() => {
   campaign.role = "player";
   activeRound = false;
   spellAvailable = false;
+  multipleSpells = false;
   activeSession = true;
   mutation = null;
   localStorage.clear();
@@ -333,6 +335,55 @@ it('keeps hit controls visible and casts a spell from the classic overview', asy
   fireEvent.click(screen.getByRole('button',{name:'Продолжить'}));
   fireEvent.click(screen.getByRole('tab',{name:'Заклинания'}));
   expect(screen.getByRole('button',{name:'Урон'})).toBeVisible();
+});
+it('edits scores, saves, skill expertise and combat resources directly on the overview', async()=>{
+  mount('/sheet');
+  const rail=await screen.findByLabelText('Характеристики персонажа');
+  expect(within(rail).getByText('Навыки').closest('details')).toHaveAttribute('open');
+  const skill=within(rail).getByRole('button',{name:'Владение навыком: Внимательность — нет'});
+  fireEvent.click(skill);
+  fireEvent.click(within(rail).getByRole('button',{name:'Владение навыком: Внимательность — владение'}));
+  expect(within(rail).getByRole('button',{name:'Владение навыком: Внимательность — экспертиза'})).toBeVisible();
+  fireEvent.click(within(rail).getByRole('checkbox',{name:'Владение спасброском: Сила'}));
+  fireEvent.change(within(rail).getByRole('spinbutton',{name:'Значение: Сила'}),{target:{value:'18'}});
+  fireEvent.change(screen.getByRole('spinbutton',{name:'Класс доспеха на обзоре'}),{target:{value:'16'}});
+  expect(within(rail).getByRole('button',{name:'Бросить проверку: Сила'})).toBeDisabled();
+  fireEvent.click(screen.getByRole('button',{name:'Сохранить'}));
+  await waitFor(()=>expect(mutation).toMatchObject({url:'/characters/1/sheet/?campaign=1',method:'PATCH',body:{abilities:{str:18},saves:['str'],skills:{perception:2},armor_class:16}}));
+});
+it('restores spell slots from the overview with confirmation', async()=>{
+  mount('/sheet');
+  fireEvent.click(await screen.findByRole('button',{name:'Сбросить ячейки'}));
+  expect(screen.getByRole('dialog',{name:'Восстановить все ячейки?'})).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Подтвердить'}));
+  await waitFor(()=>expect(mutation).toMatchObject({url:'/characters/1/resources/?campaign=1',method:'POST',body:{action:'restore_slots'}}));
+});
+it('keeps all spells in a compact searchable list with details and editing on the overview', async()=>{
+  spellAvailable=true;multipleSpells=true;
+  mount('/sheet');
+  const list=await screen.findByLabelText('Заклинания персонажа');
+  await waitFor(()=>expect(within(list).getAllByRole('button',{name:/^Применить /})).toHaveLength(10));
+  fireEvent.change(screen.getByRole('textbox',{name:'Поиск заклинаний на обзоре'}),{target:{value:'огненный'}});
+  expect(within(list).getAllByRole('button',{name:/^Применить /})).toHaveLength(1);
+  expect(within(list).getAllByText('3 круг').length).toBeGreaterThan(0);
+  fireEvent.click(within(list).getByRole('button',{name:'Подробнее: Огненный шар'}));
+  expect(screen.getByRole('dialog',{name:'Огненный шар'})).toHaveTextContent('Эффект по описанию');
+  fireEvent.click(screen.getByRole('button',{name:'Редактировать'}));
+  expect(screen.getByRole('dialog',{name:'Редактировать действие'})).toBeInTheDocument();
+});
+it('opens existing creation and deletion flows from the overview', async()=>{
+  spellAvailable=true;
+  mount('/sheet');
+  fireEvent.click(await screen.findByRole('button',{name:'Добавить'}));
+  expect(screen.getByRole('dialog',{name:'Новая атака'})).toBeInTheDocument();
+  fireEvent.keyDown(document,{key:'Escape'});
+  fireEvent.click(screen.getByRole('button',{name:'Из каталога'}));
+  expect(screen.getByRole('dialog',{name:'Добавить заклинание'})).toBeInTheDocument();
+  fireEvent.keyDown(document,{key:'Escape'});
+  fireEvent.click(screen.getByRole('button',{name:'Удалить Три искры'}));
+  expect(screen.getByRole('dialog',{name:'Удалить «Три искры»?'})).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Подтвердить'}));
+  await waitFor(()=>expect(mutation).toMatchObject({url:'/abilities/9/?campaign=1',method:'PATCH',body:{active:false,version:1}}));
 });
 it('explains why a spell cannot be applied without an active session', async()=>{
   spellAvailable=true;
