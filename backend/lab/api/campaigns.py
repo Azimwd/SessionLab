@@ -145,7 +145,9 @@ class CharacterViewSet(viewsets.ModelViewSet):
         campaign = campaign_for(self.request)
         qs = Character.objects.filter(campaign=campaign, active=True)
         if not is_dm(campaign, self.request.user):
-            qs = qs.filter(kind='player')
+            # Public table cards come from RoomView after folder/leaf checks.
+            # Full character metadata remains private to its owner and masters.
+            qs = qs.filter(kind='player', owner=self.request.user)
         return qs.order_by('name')
 
     def create(self, request, *args, **kwargs):
@@ -187,7 +189,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
 def validate_character_folder(folder, campaign, user, character=None):
     if folder is None:
         return
-    if folder.campaign_id != campaign.pk or (folder.owner_id != user.pk and not is_dm(campaign, user) and (not character or character.folder_id != folder.pk)):
+    if folder.campaign_id != campaign.pk or (not folder.is_system and folder.owner_id != user.pk and not is_dm(campaign, user) and (not character or character.folder_id != folder.pk)):
         raise PermissionDenied('Папка недоступна в этой кампании')
 
 
@@ -201,13 +203,15 @@ class CharacterFolderViewSet(viewsets.ModelViewSet):
         c = campaign_for(self.request)
         qs = CharacterFolder.objects.filter(campaign=c)
         return qs if is_dm(c, self.request.user) else qs.filter(
-            Q(owner=self.request.user) | Q(characters__owner=self.request.user, characters__active=True, characters__kind='player')
+            Q(is_system=True) | Q(owner=self.request.user) | Q(characters__owner=self.request.user, characters__active=True, characters__kind='player')
         ).distinct()
 
     def create(self, request, *args, **kwargs):
         def op(c):
             form = self.get_serializer(data=request.data)
             form.is_valid(raise_exception=True)
+            if form.validated_data['name'].strip().casefold() == 'игроки':
+                raise ValidationError('Папка «Игроки» создаётся автоматически')
             form.save(campaign=c, owner=request.user)
             return form.data
         return mutate(request, request.query_params.get('campaign'), op)
@@ -215,8 +219,12 @@ class CharacterFolderViewSet(viewsets.ModelViewSet):
     def partial_update(self, request, *args, **kwargs):
         def op(c):
             folder = get_object_or_404(CharacterFolder, pk=kwargs['pk'], campaign=c, owner=request.user)
+            if folder.is_system:
+                raise ValidationError('Системную папку «Игроки» нельзя переименовать')
             form = self.get_serializer(folder, data=request.data, partial=True)
             form.is_valid(raise_exception=True)
+            if form.validated_data.get('name', '').strip().casefold() == 'игроки':
+                raise ValidationError('Название «Игроки» зарезервировано')
             form.save()
             return form.data
         return mutate(request, request.query_params.get('campaign'), op)
@@ -224,6 +232,8 @@ class CharacterFolderViewSet(viewsets.ModelViewSet):
     def destroy(self, request, *args, **kwargs):
         def op(c):
             folder = get_object_or_404(CharacterFolder, pk=kwargs['pk'], campaign=c, owner=request.user)
+            if folder.is_system:
+                raise ValidationError('Системную папку «Игроки» нельзя удалить')
             pk = folder.pk
             folder.delete()
             return {'id': pk, 'deleted': True}

@@ -17,6 +17,7 @@ from rest_framework.views import APIView
 from lab.models import (
     AuditLog,
     Character,
+    CharacterFolder,
     CharacterSheet,
     InitiativeEntry,
     InitiativeTracker,
@@ -89,6 +90,16 @@ class RoomView(APIView):
         party = []
         npcs = []
         own_characters = []
+        all_folders = list(c.character_folders.order_by('-is_system', 'name', 'id'))
+        visible_folder_ids = {folder.id for folder in all_folders if folder.visible_to_players}
+        folders = [
+            {'id': folder.id, 'name': folder.name, 'is_system': folder.is_system,
+             'visible_to_players': folder.visible_to_players}
+            for folder in all_folders if dm or (c.table_visible_to_players and folder.visible_to_players)
+        ]
+        if dm or (c.table_visible_to_players and c.unfiled_visible_to_players):
+            folders.append({'id': 'unfiled', 'name': 'Без папки', 'is_system': False,
+                            'visible_to_players': c.unfiled_visible_to_players})
         for char in (
             Character.objects.filter(
                 campaign=c,
@@ -105,16 +116,19 @@ class RoomView(APIView):
                 sh = None
             if char.kind == 'player' and char.owner_id == request.user.id:
                 own_characters.append({'id': char.id, 'name': char.name, 'owner': char.owner_id})
-            if not dm and (not c.table_visible_to_players or not char.table_visible):
+            if not dm and (
+                not c.table_visible_to_players or not char.table_visible or
+                (char.folder_id not in visible_folder_ids if char.folder_id else not c.unfiled_visible_to_players)
+            ):
                 continue
             details = {
                 'kind': char.kind,
                 'folder': char.folder_id,
-                'table_visible': char.table_visible,
                 'speed': sh.speed if sh else 30,
                 'initiative': computed(sh)['initiative'] if sh else 0,
                 'abilities': sh.abilities if sh else {},
-            } if dm else {}
+                **({'table_visible': char.table_visible} if dm else {}),
+            }
             (npcs if char.kind == 'npc' else party).append(
                 {
                     "id": char.id,
@@ -137,7 +151,8 @@ class RoomView(APIView):
                 "revision": revision(c.id),
                 "session": {"id": s.id, "name": s.name} if s else None,
                 "party": party,
-                "npcs": npcs if dm else [],
+                "npcs": npcs,
+                "folders": folders,
                 "own_characters": own_characters,
                 "table_visible_to_players": c.table_visible_to_players,
                 "initiative": tracker_data(tracker, dm),
@@ -158,6 +173,18 @@ class RoomTableVisibility(APIView):
                 c.table_visible_to_players = visible
                 c.save(update_fields=['table_visible_to_players', 'updated_at'])
                 return {'scope': 'table', 'visible': visible}
+            if scope == 'folder':
+                folder_id = request.data.get('folder')
+                if folder_id == 'unfiled':
+                    c.unfiled_visible_to_players = visible
+                    c.save(update_fields=['unfiled_visible_to_players', 'updated_at'])
+                    return {'scope': 'folder', 'folder': 'unfiled', 'visible': visible}
+                if type(folder_id) is not int:
+                    raise ValidationError('Укажите папку')
+                folder = get_object_or_404(CharacterFolder, pk=folder_id, campaign=c)
+                folder.visible_to_players = visible
+                folder.save(update_fields=['visible_to_players', 'updated_at'])
+                return {'scope': 'folder', 'folder': folder.id, 'visible': visible}
             if scope == 'character':
                 pk = request.data.get('character')
                 if type(pk) is not int:

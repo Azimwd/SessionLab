@@ -43,6 +43,9 @@ let sheetState: any = null;
 let roomHasActors = false;
 let roomTableVisible = true;
 let roomCharacterVisible = true;
+let roomEnemyVisible = false;
+let roomUnfiledVisible = false;
+const mockFolders = [{id:1,name:'Игроки',is_system:true},{id:2,name:'Противники',is_system:false},{id:3,name:'NPC',is_system:false}];
 function mockTransport() {
   return vi
     .spyOn(globalThis, "fetch")
@@ -64,15 +67,18 @@ function mockTransport() {
         const payload=JSON.parse(String(init?.body||'{}'));
         if(payload.scope==='table')roomTableVisible=payload.visible;
         if(payload.scope==='character')roomCharacterVisible=payload.visible;
+        if(payload.scope==='folder'&&payload.folder===2)roomEnemyVisible=payload.visible;
+        if(payload.scope==='folder'&&payload.folder==='unfiled')roomUnfiledVisible=payload.visible;
         data={scope:payload.scope,visible:payload.visible};
       }
       else if (url.startsWith('/room/')) {
         const master=!url.includes('view=player');
-        const person={id:1,name:'Мира',owner:1,owner_name:'Мира',kind:'player',folder:null,table_visible:roomCharacterVisible,character_class:'Бард',level:3,hp_current:10,hp_max:15,hp_temp:0,armor_class:14,conditions:[],speed:30,initiative:2,abilities:{str:16,dex:14}};
+        const person={id:1,name:'Мира',owner:1,owner_name:'Мира',kind:'player',folder:1,table_visible:roomCharacterVisible,character_class:'Бард',level:3,hp_current:10,hp_max:15,hp_temp:0,armor_class:14,conditions:[],speed:30,initiative:2,abilities:{str:16,dex:14}};
         const npc={...person,id:2,name:'Гоблин',kind:'npc',folder:2,owner_name:'Мастер',abilities:{str:8,dex:14}};
-        data={revision:1,session:{id:1,name:'Первый шаг'},party:roomHasActors&&(master||roomTableVisible&&roomCharacterVisible)?[person]:[],npcs:roomHasActors&&master?[npc]:[],own_characters:roomHasActors?[{id:1,name:'Мира',owner:1}]:[],table_visible_to_players:roomTableVisible,initiative:{version:0,running:false,round_number:0,current:null,entries:[]}};
+        const folders=mockFolders.map(f=>({...f,visible_to_players:f.id===1?true:f.id===2?roomEnemyVisible:false}));
+        data={revision:1,session:{id:1,name:'Первый шаг'},party:roomHasActors&&(master||roomTableVisible&&roomCharacterVisible)?[person]:[],npcs:roomHasActors&&(master||roomTableVisible&&roomEnemyVisible)?[npc]:[],folders:master?[...folders,{id:'unfiled',name:'Без папки',is_system:false,visible_to_players:roomUnfiledVisible}]:roomTableVisible?folders.filter(f=>f.visible_to_players):[],own_characters:roomHasActors?[{id:1,name:'Мира',owner:1}]:[],table_visible_to_players:roomTableVisible,initiative:{version:0,running:false,round_number:0,current:null,entries:[]}};
       }
-      else if (url.startsWith('/character-folders/')) data={count:2,results:[{id:2,name:'Противники',owner:1},{id:3,name:'NPC',owner:1}]};
+      else if (url.startsWith('/character-folders/')) data={count:3,results:mockFolders.map(f=>({...f,owner:1}))};
       else if (url.startsWith('/characters/1/sheet/')) {
         sheetState??={id:1,character:1,version:1,abilities:{str:16,dex:14,con:12,int:10,wis:10,cha:14},skills:{},saves:[],armor_class:14,hp_current:10,hp_max:15,hp_temp:0,speed:30,initiative_bonus:0,spell_ability:'cha',slots:Object.fromEntries(Array.from({length:9},(_,i)=>[String(i+1),{max:2,used:0}])),conditions:[],death_successes:0,death_failures:0,inventory:'',notes:'',background:'',computed:{proficiency:2,modifiers:{str:3,dex:2,con:1,int:0,wis:0,cha:2},skills:{},saves:{str:5,dex:2,con:1,int:0,wis:0,cha:4},initiative:2,spell_attack:4,spell_dc:12}};
         if(init?.method==='PATCH'){const patch=JSON.parse(String(init.body));sheetState={...sheetState,...patch,version:sheetState.version+1};}
@@ -93,6 +99,7 @@ function mockTransport() {
               name: "Мира",
               character_class: "Бард",
               level: 3,
+              folder: 1,
               active: true,
             },
           ],
@@ -202,6 +209,8 @@ beforeEach(() => {
   roomHasActors = false;
   roomTableVisible = true;
   roomCharacterVisible = true;
+  roomEnemyVisible = false;
+  roomUnfiledVisible = false;
   localStorage.clear();
   sessionStorage.clear();
   mockTransport();
@@ -332,23 +341,37 @@ it('lets a master filter table cards by folder and hide a character without taki
   fireEvent.change(await screen.findByRole('combobox',{name:'Папка за столом'}),{target:{value:'2'}});
   expect(screen.getByRole('heading',{name:'Гоблин'})).toBeInTheDocument();
   expect(within(screen.getByRole('heading',{name:'Гоблин'}).closest('.party-card') as HTMLElement).getByText(/Инициатива/)).toBeInTheDocument();
-  fireEvent.change(screen.getByRole('combobox',{name:'Папка за столом'}),{target:{value:'players'}});
+  fireEvent.change(screen.getByRole('combobox',{name:'Папка за столом'}),{target:{value:'1'}});
   fireEvent.click(screen.getByRole('button',{name:'Скрыть Мира игрокам'}));
   await waitFor(()=>expect(mutation).toMatchObject({url:'/room/table-visibility/?campaign=1',body:{scope:'character',character:1,visible:false}}));
   fireEvent.click(screen.getByRole('link',{name:'Посмотреть как игрок'}));
   await screen.findByRole('heading',{name:'Игровая комната'});
   await waitFor(()=>expect(screen.queryByRole('heading',{name:'Мира'})).not.toBeInTheDocument());
-  expect(screen.queryByRole('combobox',{name:'Папка за столом'})).not.toBeInTheDocument();
+  expect(screen.getByRole('combobox',{name:'Папка за столом'})).toHaveValue('1');
   expect(screen.getByRole('option',{name:'Мира'})).toBeInTheDocument();
 });
 it('lets a master hide the entire table from player view', async()=>{
   campaign.role='dm';roomHasActors=true;
   mount('/master');
-  fireEvent.click(await screen.findByRole('button',{name:'Скрыть блок от игроков'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Скрыть весь стол'}));
   await waitFor(()=>expect(mutation).toMatchObject({url:'/room/table-visibility/?campaign=1',body:{scope:'table',visible:false}}));
   fireEvent.click(screen.getByRole('link',{name:'Посмотреть как игрок'}));
   expect(await screen.findByText('Мастер скрыл отображение за столом')).toBeInTheDocument();
   expect(screen.queryByRole('heading',{name:'Мира'})).not.toBeInTheDocument();
+});
+it('lets a master publish a folder, then players can select it without seeing hidden folders', async()=>{
+  campaign.role='dm';roomHasActors=true;
+  mount('/master');
+  const select=await screen.findByRole('combobox',{name:'Папка за столом'});
+  fireEvent.change(select,{target:{value:'2'}});
+  fireEvent.click(screen.getByRole('button',{name:'Показать папку игрокам'}));
+  await waitFor(()=>expect(mutation).toMatchObject({url:'/room/table-visibility/?campaign=1',body:{scope:'folder',folder:2,visible:true}}));
+  fireEvent.click(screen.getByRole('link',{name:'Посмотреть как игрок'}));
+  const playerSelect=await screen.findByRole('combobox',{name:'Папка за столом'});
+  expect(within(playerSelect).getAllByRole('option').map(o=>o.textContent)).toEqual(['Игроки','Противники']);
+  fireEvent.change(playerSelect,{target:{value:'2'}});
+  expect(await screen.findByRole('heading',{name:'Гоблин'})).toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:'Скрыть Гоблин игрокам'})).not.toBeInTheDocument();
 });
 it('sheet edits use real inputs and preserve a draft', async()=>{
   mount('/sheet');

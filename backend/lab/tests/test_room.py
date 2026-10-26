@@ -48,6 +48,11 @@ def test_dice_math():
 def test_folders_permissions_and_archived_character(world):
     dm, player, outsider, campaign, char, session = world
     url = scoped('/api/character-folders/', campaign)
+    players_folder = CharacterFolder.objects.get(campaign=campaign, is_system=True)
+    assert players_folder.name == 'Игроки' and players_folder.visible_to_players
+    assert char.folder_id == players_folder.pk
+    assert any(row['id'] == players_folder.id for row in client(player).get(url).json()['data']['results'])
+    assert client(dm).delete(scoped(f'/api/character-folders/{players_folder.id}/', campaign), HTTP_IDEMPOTENCY_KEY='keep-system-folder-1').status_code == 400
     folder = post(client(player), url, {'name': 'Важное'}).json()['data']
     assert folder['owner'] == player.id
     assert client(outsider).get(url).status_code == 403
@@ -75,7 +80,8 @@ def test_master_room_folders_and_private_table_visibility(world):
     assert master['npcs'][0]['abilities'] and master['party'][0]['id'] == char.id
     public = client(outsider).get(url).json()['data']
     assert public['npcs'] == [] and len(public['party']) == 1
-    assert 'abilities' not in public['party'][0] and 'folder' not in public['party'][0]
+    assert public['party'][0]['folder'] == char.folder_id
+    assert {f['name'] for f in public['folders']} == {'Игроки'}
     assert post(client(player), table, {'scope':'table','visible':False}).status_code == 403
     assert post(client(outsider), table, {'scope':'character','character':char.id,'visible':False}).status_code == 403
 
@@ -96,6 +102,50 @@ def test_master_room_folders_and_private_table_visibility(world):
     assert post(client(dm), table, {'scope':'character','character':goblin.id,'visible':'false'}).status_code == 400
     assert post(client(dm), table, {'scope':'character','character':char.id,'visible':True}).status_code == 200
     assert len(client(outsider).get(url).json()['data']['party']) == 1
+
+    assert post(client(outsider), table, {'scope':'folder','folder':enemies.id,'visible':True}).status_code == 403
+    assert post(client(dm), table, {'scope':'folder','folder':enemies.id,'visible':True}).status_code == 200
+    revealed = client(outsider).get(url).json()['data']
+    assert [row['name'] for row in revealed['npcs']] == ['Гоблин']
+    assert {f['name'] for f in revealed['folders']} == {'Игроки', 'Противники'}
+    assert 'Торговец' not in str(revealed)
+    assert post(client(dm), table, {'scope':'character','character':goblin.id,'visible':False}).status_code == 200
+    assert client(outsider).get(url).json()['data']['npcs'] == []
+
+    assert post(client(dm), table, {'scope':'folder','folder':char.folder_id,'visible':False}).status_code == 200
+    assert client(outsider).get(url).json()['data']['party'] == []
+    assert client(outsider).get(scoped('/api/characters/', campaign)).json()['data']['results'] == []
+    assert client(outsider).get(scoped(f'/api/characters/{char.id}/', campaign)).status_code == 404
+    assert post(client(dm), table, {'scope':'folder','folder':'unfiled','visible':True}).status_code == 200
+    unfiled = Character.objects.create(campaign=campaign, owner=dm, name='Случайный NPC', kind='npc')
+    assert unfiled.folder_id is None
+    assert [row['name'] for row in client(outsider).get(url).json()['data']['npcs']] == ['Случайный NPC']
+
+
+def test_players_folder_is_shared_by_new_campaign_masters(world):
+    dm, player, outsider, campaign, char, session = world
+    shared = CharacterFolder.objects.get(campaign=campaign, is_system=True)
+    Membership.objects.create(campaign=campaign, user=outsider, role='dm')
+    other = post(client(outsider), scoped('/api/characters/', campaign), {'name':'Новый герой','kind':'player'})
+    assert other.status_code == 200 and other.json()['data']['folder'] == shared.id
+    assert CharacterFolder.objects.filter(campaign=campaign, is_system=True).count() == 1
+    assert post(client(player), scoped('/api/character-folders/', campaign), {'name':'Игроки'}).status_code == 400
+
+
+def test_players_folder_migration_moves_only_unfiled_player_sheets(world):
+    from importlib import import_module
+    from django.apps import apps
+
+    dm, player, outsider, campaign, char, session = world
+    custom = CharacterFolder.objects.create(campaign=campaign, owner=dm, name='Важное')
+    pinned = Character.objects.create(campaign=campaign, owner=player, name='Оставить здесь', folder=custom)
+    Character.objects.filter(pk=char.pk).update(folder=None)
+    backfill = import_module('lab.migrations.0011_campaign_unfiled_visible_to_players_and_more').create_players_folders
+    backfill(apps, None)
+    char.refresh_from_db()
+    pinned.refresh_from_db()
+    assert char.folder == CharacterFolder.objects.get(campaign=campaign, is_system=True)
+    assert pinned.folder_id == custom.pk
 
 
 def test_master_starts_bulk_initiative_and_broadcasts_rolls(world):

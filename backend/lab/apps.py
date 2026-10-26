@@ -6,3 +6,4 @@ class LabConfig(AppConfig):
 
     def ready(self):
         from .api import schema
+        from . import signals  # noqa: F401

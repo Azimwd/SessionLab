@@ -45,6 +45,7 @@ class Campaign(Timestamped):
     invite_code = models.CharField(max_length=64, unique=True, default=invite_code)
     settings = models.JSONField(default=default_settings)
     table_visible_to_players = models.BooleanField(default=True)
+    unfiled_visible_to_players = models.BooleanField(default=False)
 
     def __str__(self):
         return self.name
@@ -70,9 +71,14 @@ class CharacterFolder(Timestamped):
     campaign = models.ForeignKey(Campaign, on_delete=models.PROTECT, related_name='character_folders')
     owner = models.ForeignKey(User, on_delete=models.PROTECT)
     name = models.CharField(max_length=80)
+    is_system = models.BooleanField(default=False)
+    visible_to_players = models.BooleanField(default=False)
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=['campaign', 'owner', 'name'], name='unique_character_folder_name')]
+        constraints = [
+            models.UniqueConstraint(fields=['campaign', 'owner', 'name'], name='unique_character_folder_name'),
+            models.UniqueConstraint(fields=['campaign'], condition=Q(is_system=True), name='unique_campaign_players_folder'),
+        ]
         ordering = ['name', 'id']
 
 
