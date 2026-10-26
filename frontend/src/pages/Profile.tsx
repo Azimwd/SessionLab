@@ -10,6 +10,7 @@ import {
   Check,
   ArrowRight,
   Award,
+  Trash2,
 } from "lucide-react";
 import { useApp, useData, useAction } from "../app";
 import {
@@ -23,12 +24,14 @@ import {
   Pagination,
   ErrorBox,
   Loading,
+  Confirm,
 } from "../components/ui";
 import type { Json } from "../api/client";
 export default function Profile() {
   const a = useApp();
   const [modal, setModal] = useState(""),
     [edit, setEdit] = useState<Json | null>(null),
+    [deleting, setDeleting] = useState<Json | null>(null),
     [page, setPage] = useState(1);
   const action = useAction("Изменения сохранены");
   const tx = useData<any>(
@@ -46,15 +49,14 @@ export default function Profile() {
       <div className="profile-grid">
         <Card>
           <div className="profile-heading">
-            <div className="avatar huge">
-              {(a.user.first_name || a.user.email).slice(0, 1).toUpperCase()}
-            </div>
+            {a.user.avatar_url?<img className="avatar huge" src={a.user.avatar_url} alt="Аватар профиля"/>:<div className="avatar huge">{(a.user.first_name || a.user.email).slice(0, 1).toUpperCase()}</div>}
             <div>
               <h2>{a.user.first_name || "Игрок"}</h2>
               <p>{a.user.email}</p>
               <Badge>SESSIONLAB MEMBER</Badge>
             </div>
           </div>
+          <div className="avatar-upload"><label>Фото профиля <input type="file" accept="image/png,image/jpeg,image/webp" aria-label="Загрузить фото профиля" disabled={action.isPending} onChange={e=>{const file=e.target.files?.[0];if(file){const data=new FormData();data.append('image',file);action.mutate({path:'/auth/me/avatar/',body:data});e.target.value='';}}}/></label>{a.user.avatar_url&&<Button variant="ghost" disabled={action.isPending} onClick={()=>action.mutate({path:'/auth/me/avatar/',method:'DELETE'})}>Удалить фото</Button>}</div>
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -170,7 +172,7 @@ export default function Profile() {
           .map((c) => (
             <Card key={c.id}>
               <div className="card-heading">
-                <span className="avatar">{c.name.slice(0, 1)}</span>
+                {c.avatar_url?<img className="avatar" src={c.avatar_url} alt=""/>:<span className="avatar">{c.name.slice(0, 1)}</span>}
                 <Badge>{c.level} УР.</Badge>
               </div>
               <h3>{c.name}</h3>
@@ -196,6 +198,7 @@ export default function Profile() {
                 >
                   Изменить
                 </Button>
+                <Button variant="ghost" aria-label={`Удалить ${c.name}`} onClick={()=>setDeleting(c)}><Trash2 size={15}/> Удалить</Button>
               </div>
             </Card>
           ))}
@@ -296,7 +299,10 @@ export default function Profile() {
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              const f = Object.fromEntries(new FormData(e.currentTarget));
+              const form = new FormData(e.currentTarget);
+              const photo = form.get('image');
+              form.delete('image');
+              const f = Object.fromEntries(form);
               const body =
                 modal === "character"
                   ? { ...f, level: Number(f.level), campaign: a.campaign?.id }
@@ -316,9 +322,12 @@ export default function Profile() {
                   method: edit && modal === "character" ? "PATCH" : "POST",
                 },
                 {
-                  onSuccess: (r) => {
+                  onSuccess: async (r) => {
                     if (modal !== "character") a.selectCampaign(String(r.id));
-                    else a.selectCharacter(String(r.id));
+                    else {
+                      a.selectCharacter(String(r.id));
+                      if(photo instanceof File && photo.size){const upload=new FormData();upload.append('image',photo);try{await action.mutateAsync({path:`/characters/${r.id}/avatar/?campaign=${a.cid}`,body:upload});}catch{a.notify('Персонаж сохранён, но фото не загрузилось. Повторите загрузку при редактировании.');}}
+                    }
                     setModal("");
                   },
                 },
@@ -368,15 +377,9 @@ export default function Profile() {
                         maxLength={60}
                       />
                     </Field>
-                    <Field label="URL аватара">
-                      <input
-                        name="avatar"
-                        type="url"
-                        defaultValue={edit?.avatar}
-                      />
-                    </Field>
                   </div>
                 )}
+                {modal==='character'&&<Field label="Фото персонажа (PNG, JPEG или WebP, до 2 МБ)"><input type="file" name="image" accept="image/png,image/jpeg,image/webp"/></Field>}
                 <Field label="Краткая история">
                   <textarea
                     name="description"
@@ -392,6 +395,7 @@ export default function Profile() {
           </form>
         </Modal>
       )}
+      {deleting&&<Confirm title={`Удалить «${deleting.name}»?`} text="Персонаж исчезнет из списка, история останется." busy={action.isPending} onClose={()=>setDeleting(null)} onConfirm={()=>action.mutate({path:`/characters/${deleting.id}/?campaign=${a.cid}`,method:'DELETE'},{onSuccess:()=>{if(a.charId===String(deleting.id))a.selectCharacter('');setDeleting(null);}})}/>}
     </>
   );
 }

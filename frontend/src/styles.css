@@ -410,6 +410,7 @@ select {
   background: #e7e0fa;
   color: #6954a3;
   flex-shrink: 0;
+  object-fit: cover;
 }
 .avatar.tiny {
   width: 31px;
@@ -4275,5 +4276,18 @@ blockquote {
 @media(max-width:1100px){.player-layout .topbar,.master-layout .topbar{flex-wrap:wrap;height:auto;min-height:74px;padding-block:10px}.header-nav{order:4;width:100%}.spell-facts{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:700px){.player-layout .content{padding:24px 16px 0}.player-layout .topbar{padding:10px 16px}.player-layout .topbar .session-live{display:none}.header-nav a{padding:9px}.games-actions form{min-width:100%;flex-wrap:wrap}.games-actions form .button{width:100%;justify-content:center}.games-filters{flex-wrap:wrap}.games-filters label{max-width:none;min-width:100%}.catalog-filters{grid-template-columns:repeat(2,minmax(0,1fr))}.catalog-row{align-items:start;flex-direction:column}.catalog-actions{justify-content:start}.spell-detail header{align-items:start;flex-direction:column}.spell-facts{grid-template-columns:1fr 1fr}}
 @media(max-width:480px){.catalog-filters{grid-template-columns:1fr}.spell-facts{grid-template-columns:1fr}}
+
+/* Compact header navigation, usable by pointer and keyboard. */
+.header-nav{overflow:visible}
+.header-dropdown{position:relative;display:inline-flex;align-items:center;white-space:nowrap;border-radius:10px}
+.header-dropdown>button{display:grid;place-items:center;border:0;background:transparent;color:var(--muted);padding:10px 8px 10px 0;cursor:pointer}
+.header-dropdown:hover,.header-dropdown:focus-within{background:var(--accent-bg)}
+.header-dropdown-panel{position:absolute;top:100%;left:0;z-index:80;min-width:205px;display:grid;padding:7px;background:var(--card);border:1px solid var(--border);border-radius:13px;box-shadow:0 18px 40px #10121727}
+.header-dropdown-panel a{padding:12px 14px;font-size:13px}
+.header-nav a:focus-visible,.header-dropdown button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.avatar-upload{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:14px 0}
+.avatar-upload input[type=file]{max-width:100%;font-size:12px;color:var(--muted)}
+.avatar-upload input[type=file]::file-selector-button{background:var(--accent-bg);border:1px solid var(--border);border-radius:9px;padding:9px 12px;color:var(--text);cursor:pointer;margin-right:10px}
+@media(max-width:700px){.header-nav{flex-wrap:wrap;overflow:visible}.header-dropdown-panel{max-width:calc(100vw - 28px)}}
 .spell-description .preserve-lines{white-space:pre-wrap;overflow-wrap:anywhere}
 .spell-description summary{cursor:pointer;font-weight:700;color:var(--accent)}

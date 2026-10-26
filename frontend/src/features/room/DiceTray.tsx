@@ -5,6 +5,7 @@ import { useApp } from '../../app';
 import { request, type Json } from '../../api/client';
 import { Button, Field, ErrorBox } from '../../components/ui';
 import { RollResult } from './RollResult';
+import { folderKey, folderOptions } from './folderOptions';
 
 export function appendDie(previous:string,sides:number) {
   if (!previous) return `1d${sides}`;
@@ -20,7 +21,7 @@ export function appendDie(previous:string,sides:number) {
   return `${previous}+1d${sides}`.slice(0,80);
 }
 
-export default function DiceTray({ characters }: { characters: Json[] }) {
+export default function DiceTray({ characters, folders=[] }: { characters: Json[]; folders?: Json[] }) {
   const a = useApp();
   const [selected, setSelected] = useState('');
   const [formula, setFormula] = useState('');
@@ -30,7 +31,7 @@ export default function DiceTray({ characters }: { characters: Json[] }) {
   const roll = useMutation({mutationFn: () => request(`/room/rolls/?campaign=${a.cid}`, 'POST', {character:asMaster ? null : char?.id,kind:'custom',formula,visibility}),onSuccess:()=>a.refresh()});
   const addDie = (sides:number) => setFormula(previous => appendDie(previous,sides));
   return <div className="dice-tray"><div className="section-title"><h2>Бросить кубики</h2><Dice5 size={20}/></div>
-    <Field label="От чьего лица"><select value={asMaster ? 'master' : char?.id || ''} onChange={e => setSelected(e.target.value)}>{a.masterMode && <option value="master">Мастер / NPC</option>}{!characters.length && !a.masterMode && <option value="">Сначала создайте персонажа</option>}{characters.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
+    <Field label="От чьего лица"><select aria-label="От чьего лица бросить кубики" value={asMaster ? 'master' : char?.id || ''} onChange={e => setSelected(e.target.value)}>{a.masterMode && <option value="master">Мастер (без листа)</option>}{!characters.length && !a.masterMode && <option value="">Сначала создайте персонажа</option>}{folderOptions(folders,characters).map(([id,name])=>{const group=characters.filter(c=>folderKey(c)===id);return group.length?<optgroup key={id} label={name}>{group.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</optgroup>:null})}</select></Field>
     <div className="dice-picker">{[4,6,8,10,12,20,100].map(n=><button key={n} type="button" aria-label={`Добавить d${n}`} onClick={()=>addDie(n)}>+ d{n}</button>)}<button type="button" onClick={()=>setFormula('')}>Очистить</button></div>
     <form onSubmit={e=>{e.preventDefault();roll.mutate();}}><Field label="Формула" hint="Например: 2d6+3, 1d20−2 (минус: -)"><input value={formula} maxLength={80} onChange={e=>setFormula(e.target.value)} required/></Field>
     <Field label="Кто увидит результат"><select value={visibility} onChange={e=>setVisibility(e.target.value)}><option value="public">Вся комната</option><option value="dm">Только мастер</option></select></Field>

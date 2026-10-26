@@ -7,6 +7,7 @@ import {
   Suspense,
   type ReactNode,
   useCallback,
+  useRef,
 } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -167,6 +168,7 @@ export default function App() {
   const [theme, setTheme] = useState(
     localStorage.getItem("sl:theme") || "light",
   );
+  const themeSaving = useRef(false);
   const [reduced, setReducedState] = useState(
     localStorage.getItem("sl:reduced") === "true",
   );
@@ -233,7 +235,21 @@ export default function App() {
     notify: setToast,
     refresh,
     theme,
-    toggleTheme: () => setTheme((t) => (t === "dark" ? "light" : "dark")),
+    toggleTheme: () => {
+      if (themeSaving.current) return;
+      const previous = theme;
+      const next = theme === "dark" ? "light" : "dark";
+      themeSaving.current = true;
+      setTheme(next);
+      localStorage.setItem("sl:theme", next);
+      request("/auth/me/", "PATCH", { theme: next }).then((updated) => {
+        qc.setQueryData(["me"], updated);
+      }).catch((error: Error) => {
+        setTheme(previous);
+        localStorage.setItem("sl:theme", previous);
+        setToast(`Не удалось сохранить тему: ${error.message}`);
+      }).finally(() => { themeSaving.current = false; });
+    },
     reduced,
     setReduced: setReducedState,
   };
@@ -398,9 +414,7 @@ function Shell({ children }: { children: ReactNode }) {
             </button>
           </div>
           <Link to="/profile" className="user-block">
-            <div className="avatar">
-              {(a.user.first_name || a.user.email).slice(0, 1).toUpperCase()}
-            </div>
+            {a.user.avatar_url?<img className="avatar" src={a.user.avatar_url} alt=""/>:<div className="avatar">{(a.user.first_name || a.user.email).slice(0, 1).toUpperCase()}</div>}
             <div>
               <strong>{a.user.first_name || "Игрок"}</strong>
               <small>
@@ -424,9 +438,13 @@ function Shell({ children }: { children: ReactNode }) {
             <Menu />
           </button>:<Link className="brand player-brand" to="/"><span className="brand-icon"><FlaskConical size={19}/></span> session<span>lab</span></Link>}
           <div className="breadcrumb">
-            {a.masterMode ? 'Панель управления' : <select aria-label="Текущая кампания" value={a.cid} onChange={e=>a.selectCampaign(e.target.value)}>{!a.campaign&&<option value="">Нет игры</option>}{a.campaigns.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>}
+            {a.masterMode ? a.campaign?.name : <select aria-label="Текущая кампания" value={a.cid} onChange={e=>a.selectCampaign(e.target.value)}>{!a.campaign&&<option value="">Нет игры</option>}{a.campaigns.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>}
           </div>
-          <nav className="header-nav" aria-label="Навигация по игре"><NavLink to="/" end>Игры</NavLink><NavLink to="/room">Комната</NavLink><NavLink to="/sheet">Лист</NavLink><NavLink to="/spells">Заклинания</NavLink><NavLink to="/effects">Эффекты</NavLink><NavLink to="/quests">Квесты</NavLink><NavLink to="/casino">Казино</NavLink>{a.campaign?.role==='dm'&&<NavLink to="/dm">Панель управления</NavLink>}</nav>
+          <nav className="header-nav" aria-label="Навигация по игре">
+            <NavLink to="/" end>Игры</NavLink><NavLink to="/room">Комната</NavLink><NavLink to="/sheet">Лист</NavLink>
+            <HeaderDropdown label="Инструменты" to="/spells" items={[["/spells","Заклинания"],["/effects","Эффекты"],["/quests","Квесты"],["/casino","Казино"]]}/>
+            {a.campaign?.role==='dm'&&<HeaderDropdown label="Панель управления" to="/dm" items={[["/master","Стол мастера"],["/master/sheets","Листы группы"],["/dm","Управление кампанией"]]}/>}
+          </nav>
           <div className="topbar-right">
             {a.session && (
               <span className="session-live">
@@ -439,7 +457,7 @@ function Shell({ children }: { children: ReactNode }) {
               <Count value={a.wallet.balance} />
               <small>ST</small>
             </Link>
-            {!a.masterMode&&<Link className="header-profile" to="/profile" aria-label="Мой профиль"><UserRound size={18}/></Link>}
+            {!a.masterMode&&<Link className="header-profile" to="/profile" aria-label="Мой профиль">{a.user.avatar_url?<img className="avatar tiny" src={a.user.avatar_url} alt=""/>:<UserRound size={18}/>}</Link>}
             <button
               aria-label="Выйти"
               title="Выйти"
@@ -478,4 +496,16 @@ function Shell({ children }: { children: ReactNode }) {
       </div>
     </div>
   );
+}
+
+function HeaderDropdown({label,to,items}:{label:string;to:string;items:[string,string][]}) {
+  const [open,setOpen]=useState(false);
+  const location=useLocation();
+  useEffect(()=>setOpen(false),[location.pathname]);
+  const active=items.some(([path])=>location.pathname===path);
+  return <div className="header-dropdown" onMouseEnter={()=>setOpen(true)} onMouseLeave={()=>setOpen(false)} onKeyDown={e=>{if(e.key==='Escape')setOpen(false)}}>
+    <NavLink to={to} className={active?'active':''}>{label}</NavLink>
+    <button type="button" aria-label={`Открыть меню «${label}»`} aria-expanded={open} onClick={()=>setOpen(!open)}><ChevronDown size={14}/></button>
+    {open&&<div className="header-dropdown-panel">{items.map(([path,title])=><NavLink key={path} to={path} onClick={()=>setOpen(false)}>{title}</NavLink>)}</div>}
+  </div>;
 }

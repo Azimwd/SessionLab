@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./app";
 import "./styles.css";
+document.documentElement.dataset.theme = localStorage.getItem("sl:theme") === "dark" ? "dark" : "light";
 const client = new QueryClient({
   defaultOptions: {
     queries: { staleTime: 20000, refetchOnWindowFocus: true, retry: 1 },

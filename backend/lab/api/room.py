@@ -46,7 +46,7 @@ def tracker_data(tracker, dm=False):
             "current": None,
             "entries": [],
         }
-    entries = tracker.entries.select_related("character")
+    entries = tracker.entries.select_related("character__folder")
     if not dm:
         entries = entries.filter(hidden=False)
     rows = [
@@ -54,6 +54,8 @@ def tracker_data(tracker, dm=False):
             "id": e.id,
             "character": e.character_id,
             "kind": e.character.kind if e.character_id else 'npc',
+            "folder": e.character.folder_id if dm and e.character_id else None,
+            "folder_name": (e.character.folder.name if e.character_id and e.character.folder_id else 'Без папки') if dm else None,
             "name": e.name,
             "initiative": e.initiative,
             "hidden": e.hidden,
@@ -115,7 +117,9 @@ class RoomView(APIView):
             except CharacterSheet.DoesNotExist:
                 sh = None
             if char.kind == 'player' and char.owner_id == request.user.id:
-                own_characters.append({'id': char.id, 'name': char.name, 'owner': char.owner_id})
+                own_characters.append({'id': char.id, 'name': char.name, 'owner': char.owner_id,
+                                       'folder': char.folder_id,
+                                       'folder_name': char.folder.name if char.folder_id else 'Без папки'})
             if not dm and (
                 not c.table_visible_to_players or not char.table_visible or
                 (char.folder_id not in visible_folder_ids if char.folder_id else not c.unfiled_visible_to_players)
@@ -124,6 +128,7 @@ class RoomView(APIView):
             details = {
                 'kind': char.kind,
                 'folder': char.folder_id,
+                'folder_name': char.folder.name if dm and char.folder_id else None,
                 'speed': sh.speed if sh else 30,
                 'initiative': computed(sh)['initiative'] if sh else 0,
                 'abilities': sh.abilities if sh else {},
@@ -133,6 +138,7 @@ class RoomView(APIView):
                 {
                     "id": char.id,
                     "name": char.name,
+                    "avatar_url": f"/api/characters/{char.id}/avatar/?campaign={c.id}&v={char.avatar_updated_at.timestamp()}" if char.avatar_updated_at else None,
                     "owner": char.owner_id,
                     "owner_name": char.owner.first_name or "Участник",
                     "character_class": char.character_class,

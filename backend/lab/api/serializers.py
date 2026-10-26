@@ -36,10 +36,15 @@ def validate_settings(value, partial=False):
 
 
 class UserSerializer(serializers.ModelSerializer):
+    avatar_url = serializers.SerializerMethodField()
+
     class Meta:
         model = User
-        fields = ["id", "email", "first_name", "theme", "reduced_motion", "account_role"]
-        read_only_fields = ["account_role"]
+        fields = ["id", "email", "first_name", "theme", "reduced_motion", "account_role", "avatar_url"]
+        read_only_fields = ["account_role", "avatar_url"]
+
+    def get_avatar_url(self, obj):
+        return f"/api/auth/me/avatar/?v={obj.avatar_updated_at.timestamp()}" if obj.avatar_updated_at else None
 
     def validate_theme(self, v):
         if v not in ["light", "dark"]:
@@ -78,6 +83,7 @@ class CampaignSerializer(serializers.ModelSerializer):
 
 class CharacterSerializer(serializers.ModelSerializer):
     level = serializers.IntegerField(min_value=1, max_value=30, required=False)
+    avatar_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Character
@@ -91,11 +97,16 @@ class CharacterSerializer(serializers.ModelSerializer):
             "level",
             "species",
             "description",
-            "avatar",
+            "avatar_url",
             "active",
             "folder",
         ]
         read_only_fields = ["campaign", "owner"]
+
+    def get_avatar_url(self, obj):
+        if obj.avatar_updated_at:
+            return f"/api/characters/{obj.pk}/avatar/?campaign={obj.campaign_id}&v={obj.avatar_updated_at.timestamp()}"
+        return None
 
 
 class CharacterFolderSerializer(serializers.ModelSerializer):

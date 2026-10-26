@@ -6,11 +6,9 @@ cd D:\project\Django\SessionLab
 $env:TEST_SQLITE = "1"
 $env:COOKIE_SECURE = "0"
 $env:DJANGO_DEBUG = "1"
-
 & .\.venv\Scripts\python.exe .\backend\manage.py migrate
 & .\.venv\Scripts\python.exe .\backend\manage.py seed_initial_data
+& .\.venv\Scripts\python.exe -m pip install -r .\backend\requirements.txt
 & .\.venv\Scripts\python.exe .\backend\manage.py runserver 8000
 
-cd D:\project\Django\SessionLab
-& .\.venv\Scripts\python.exe -m pip install -r .\backend\requirements.lock.txt
-& .\.venv\Scripts\python.exe .\backend\manage.py runserver 8000
+./.venv/bin/python manage.py migrate

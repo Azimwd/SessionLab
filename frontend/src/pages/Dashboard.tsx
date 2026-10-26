@@ -142,9 +142,7 @@ export default function Dashboard() {
             </div>
           </div>
           <div>
-            <span className="avatar tiny">
-              {a.character?.name?.slice(0, 1) || "?"}
-            </span>
+            {a.character?.avatar_url?<img className="avatar tiny" src={a.character.avatar_url} alt=""/>:<span className="avatar tiny">{a.character?.name?.slice(0, 1) || "?"}</span>}
             <div>
               <small>АКТИВНЫЙ ПЕРСОНАЖ</small>
               {a.character ? (

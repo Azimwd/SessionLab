@@ -24,6 +24,9 @@ class User(AbstractUser):
     account_role = models.CharField(max_length=10, choices=[('dm', 'Master'), ('player', 'Player')], default='dm')
     theme = models.CharField(max_length=10, default="light")
     reduced_motion = models.BooleanField(default=False)
+    avatar_image = models.BinaryField(null=True, blank=True)
+    avatar_mime = models.CharField(max_length=20, blank=True)
+    avatar_updated_at = models.DateTimeField(null=True, blank=True)
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["username"]
 
@@ -92,6 +95,9 @@ class Character(Timestamped):
     species = models.CharField(max_length=60, blank=True)
     description = models.TextField(blank=True)
     avatar = models.URLField(blank=True)
+    avatar_image = models.BinaryField(null=True, blank=True)
+    avatar_mime = models.CharField(max_length=20, blank=True)
+    avatar_updated_at = models.DateTimeField(null=True, blank=True)
     active = models.BooleanField(default=True)
     table_visible = models.BooleanField(default=True)
     folder = models.ForeignKey('CharacterFolder', on_delete=models.SET_NULL, null=True, blank=True, related_name='characters')

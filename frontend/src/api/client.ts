@@ -36,7 +36,7 @@ export async function request<T = Json>(
     const j = await r.json();
     csrf = j.data.csrfToken;
   }
-  const pendingKey = `sl:pending:${method}:${path}:${JSON.stringify(body)}`;
+  const pendingKey = `sl:pending:${method}:${path}:${body instanceof FormData ? Array.from(body.entries()).map(([k,v]) => [k, v instanceof File ? [v.name,v.size,v.lastModified] : v]).join(':') : JSON.stringify(body)}`;
   let id = "";
   if (method !== "GET") {
     id = sessionStorage.getItem(pendingKey) || crypto.randomUUID();
@@ -48,12 +48,12 @@ export async function request<T = Json>(
       method,
       credentials: "include",
       headers: {
-        "Content-Type": "application/json",
+        ...(body instanceof FormData ? {} : { "Content-Type": "application/json" }),
         ...(method !== "GET"
           ? { "X-CSRFToken": csrf, "Idempotency-Key": id }
           : {}),
       },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body),
       signal: AbortSignal.timeout(20000),
     });
   } catch {

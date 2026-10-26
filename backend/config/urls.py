@@ -9,6 +9,7 @@ from lab.api.dm import *
 from lab.api.health import health
 from lab.api.sheets import SheetView, SheetResource, AbilitiesView, AbilityDetail, RollView, AbilityUse, SpellCatalogView, SpellCatalogDetail, AddCatalogSpell
 from lab.api.room import RoomView, RoomEvents, RoomTableVisibility, InitiativeView, room_stream
+from lab.api.avatars import ProfileAvatar, CharacterAvatar
 
 router = DefaultRouter()
 for prefix, view, base in [
@@ -24,6 +25,8 @@ for prefix, view, base in [
 ]:
     router.register(prefix, view, basename=base)
 urlpatterns = [
+    path("api/auth/me/avatar/", ProfileAvatar.as_view()),
+    path("api/characters/<int:pk>/avatar/", CharacterAvatar.as_view()),
     path("api/room/", RoomView.as_view()),
     path("api/room/table-visibility/", RoomTableVisibility.as_view()),
     path("api/room/events/", RoomEvents.as_view()),

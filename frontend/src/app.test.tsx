@@ -59,6 +59,7 @@ function mockTransport() {
             JSON.stringify({ error: { detail: "Authentication required" } }),
             { status: 403 },
           );
+        if (init?.method === 'PATCH') Object.assign(user, JSON.parse(String(init.body)));
         data = user;
       } else if (url === "/campaigns/")
         data = { count: 1, results: [campaign] };
@@ -199,6 +200,7 @@ function mount(path = "/") {
 }
 beforeEach(() => {
   authenticated = true;
+  user.theme = 'light';
   campaign.role = "player";
   activeRound = false;
   spellAvailable = false;
@@ -249,6 +251,7 @@ describe("Connected routes", () => {
   it("navigates into effects through router", async () => {
     mount();
     await screen.findByRole("heading", { name: "Кампании" });
+    fireEvent.click(screen.getByRole("button", { name: "Открыть меню «Инструменты»" }));
     fireEvent.click(screen.getByRole("link", { name: "Эффекты" }));
     expect(
       await screen.findByRole("heading", { name: "Пусть случится история." }),
@@ -319,7 +322,53 @@ it('master landing has separate tools and can switch to player view', async()=>{
   expect(within(sidebar).queryByText(/Хорошей истории/)).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('link',{name:'Посмотреть как игрок'}));
   await screen.findByRole('heading',{name:'Игровая комната'});
+  fireEvent.click(screen.getByRole('button',{name:'Открыть меню «Инструменты»'}));
   expect(screen.getByRole('link',{name:'Эффекты'})).toBeVisible();
+});
+it('persists a dark theme on the server and restores it after remount',async()=>{
+  mount('/profile');
+  await screen.findByRole('heading',{name:'Мой профиль'});
+  fireEvent.click(screen.getByRole('button',{name:'Переключить тему'}));
+  await waitFor(()=>expect(user.theme).toBe('dark'));
+  cleanup();
+  mount('/profile');
+  await screen.findByRole('heading',{name:'Мой профиль'});
+  await waitFor(()=>expect(document.documentElement.dataset.theme).toBe('dark'));
+});
+it('filters initiative setup and group sheets using real campaign folders',async()=>{
+  campaign.role='dm';roomHasActors=true;mount('/master');
+  await screen.findByRole('heading',{name:'Стол мастера'});
+  fireEvent.click(screen.getByRole('button',{name:/Выбрать состав и начать/}));
+  const folder=screen.getByRole('combobox',{name:'Папка для состава инициативы'});
+  fireEvent.change(folder,{target:{value:'2'}});
+  expect(within(screen.getByRole('dialog')).getByRole('checkbox',{name:/Гоблин/})).toBeEnabled();
+  expect(screen.queryByText('NPC и противники')).not.toBeInTheDocument();
+  fireEvent.change(folder,{target:{value:'unfiled'}});
+  expect(screen.getByText(/В этой папке пока нет доступных листов/)).toBeInTheDocument();
+  cleanup();
+  mount('/master/sheets');
+  const sheets=await screen.findByRole('combobox',{name:'Папка листов группы'});
+  await within(sheets).findByRole('option',{name:'Противники · 0'});
+  fireEvent.change(sheets,{target:{value:'2'}});
+  expect(sheets).toHaveValue('2');
+  expect(screen.queryByRole('button',{name:'Удалить папку Противники'})).not.toBeInTheDocument();
+});
+it('opens compact header menus and routes the management label to campaign settings',async()=>{
+  campaign.role='dm';mount('/room');
+  await screen.findByRole('heading',{name:'Игровая комната'});
+  fireEvent.click(screen.getByRole('button',{name:'Открыть меню «Панель управления»'}));
+  const nav=screen.getByRole('navigation',{name:'Навигация по игре'});
+  expect(within(nav).getByRole('link',{name:'Стол мастера'})).toBeVisible();
+  expect(within(nav).getByRole('link',{name:'Листы группы'})).toBeVisible();
+  fireEvent.click(within(nav).getByRole('link',{name:'Панель управления'}));
+  await screen.findByRole('heading',{name:'Входящие запросы'});
+});
+it('archives an owned character from the profile after confirmation',async()=>{
+  mount('/profile');
+  await screen.findByRole('heading',{name:'Мои персонажи'});
+  fireEvent.click(await screen.findByRole('button',{name:'Удалить Мира'}));
+  fireEvent.click(screen.getByRole('button',{name:'Подтвердить'}));
+  await waitFor(()=>expect(mutation).toMatchObject({url:'/characters/1/?campaign=1',method:'DELETE'}));
 });
 it('searches the spell catalog on the server with combined filters',async()=>{
   mount('/spells');

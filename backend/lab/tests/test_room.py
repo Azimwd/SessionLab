@@ -1,6 +1,7 @@
 from unittest.mock import patch
 import pytest
 from django.test import Client
+from django.core.files.uploadedfile import SimpleUploadedFile
 from lab.models import *
 from lab.services.dice import parse_formula, roll_formula, d20
 from lab.services.sheets import sheet_for
@@ -10,6 +11,30 @@ from .test_api import world, client, post, scoped
 
 def patch_api(api, path, data, key="sheet-patch-test"):
     return api.patch(path, data, format="json", HTTP_IDEMPOTENCY_KEY=key)
+
+
+def test_avatar_upload_private_storage_and_permissions(world):
+    import base64
+    dm, player, outsider, campaign, char, _ = world
+    png = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/nwAAAABJRU5ErkJggg==')
+    path = scoped(f'/api/characters/{char.id}/avatar/', campaign)
+    own = client(player)
+    upload = own.post(path, {'image': SimpleUploadedFile('portrait.png', png, content_type='image/png')}, format='multipart')
+    assert upload.status_code == 200, upload.content
+    assert upload.json()['data']['avatar_url'].startswith(f'/api/characters/{char.id}/avatar/')
+    assert own.get(path).content == png
+    assert client(dm).get(path).status_code == 200
+    assert client(outsider).get(path).status_code == 403
+    assert own.post(path, {'image': SimpleUploadedFile('bad.png', b'<script>alert(1)</script>', content_type='image/png')}, format='multipart').status_code == 400
+    assert client(dm).get(path).content == png
+    assert client(player).post('/api/auth/me/avatar/', {'image': SimpleUploadedFile('me.png', png, content_type='image/png')}, format='multipart').status_code == 200
+    assert client(player).get('/api/auth/me/avatar/').content == png
+    assert client(dm).get('/api/auth/me/avatar/').status_code == 404
+    char.table_visible = False
+    char.save(update_fields=['table_visible'])
+    assert client(dm).get(path).status_code == 200
+    assert client(player).delete(path).status_code == 200
+    assert client(player).get(path).status_code == 404
 
 
 @pytest.mark.parametrize(
@@ -77,10 +102,12 @@ def test_master_room_folders_and_private_table_visibility(world):
     table = scoped('/api/room/table-visibility/', campaign)
     master = client(dm).get(url).json()['data']
     assert {row['folder'] for row in master['npcs']} == {npcs.id, enemies.id}
+    assert {row['folder_name'] for row in master['npcs']} == {'NPC', 'Противники'}
     assert master['npcs'][0]['abilities'] and master['party'][0]['id'] == char.id
     public = client(outsider).get(url).json()['data']
     assert public['npcs'] == [] and len(public['party']) == 1
     assert public['party'][0]['folder'] == char.folder_id
+    assert public['party'][0]['folder_name'] is None
     assert {f['name'] for f in public['folders']} == {'Игроки'}
     assert post(client(player), table, {'scope':'table','visible':False}).status_code == 403
     assert post(client(outsider), table, {'scope':'character','character':char.id,'visible':False}).status_code == 403
@@ -97,7 +124,7 @@ def test_master_room_folders_and_private_table_visibility(world):
     assert post(client(dm), table, {'scope':'character','character':char.id,'visible':False}).status_code == 200
     assert client(outsider).get(url).json()['data']['party'] == []
     owned = client(player).get(url).json()['data']
-    assert owned['party'] == [] and owned['own_characters'] == [{'id':char.id,'name':char.name,'owner':player.id}]
+    assert owned['party'] == [] and owned['own_characters'] == [{'id':char.id,'name':char.name,'owner':player.id,'folder':char.folder_id,'folder_name':'Игроки'}]
     assert client(dm).get(url).json()['data']['party'][0]['table_visible'] is False
     assert post(client(dm), table, {'scope':'character','character':goblin.id,'visible':'false'}).status_code == 400
     assert post(client(dm), table, {'scope':'character','character':char.id,'visible':True}).status_code == 200
