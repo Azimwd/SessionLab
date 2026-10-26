@@ -106,4 +106,17 @@ def envelope_hook(result, generator, request, public):
             },
         }
     }
+    result["paths"]["/api/integrations/dmhub/events/"] = {
+        "get": {
+            "operationId": "dmhub_bridge_events",
+            "summary": "Saved public room rolls for a campaign's DMHub bridge",
+            "description": "Read-only. Dedicated DMHub bearer token, rotated or revoked by campaign DM. No session cookie or CSRF. cursor=latest initializes from now; numeric cursor pages up to 50 committed public roll/ability events. Never returns hidden events or raw payloads.",
+            "security": [{"DMHubBridgeToken": []}],
+            "parameters": [{"name": "cursor", "in": "query", "schema": {"type": "string"}, "required": False}],
+            "responses": {"200": {"description": "JSON envelope: data.events [{id,session,text}], data.cursor"}, "401": {"description": "Missing, revoked or invalid bearer token"}},
+        },
+    }
+    result.setdefault("components", {}).setdefault("securitySchemes", {})["DMHubBridgeToken"] = {
+        "type": "http", "scheme": "bearer", "description": "Dedicated campaign-scoped key, shown once on rotation."
+    }
     return result

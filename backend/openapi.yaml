@@ -355,6 +355,67 @@ paths:
         schema:
           type: string
         description: Masked token from GET /api/auth/csrf/.
+  /api/auth/me/avatar/:
+    get:
+      operationId: auth_me_avatar_retrieve
+      tags:
+      - auth
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          description: No response body
+      parameters: []
+    post:
+      operationId: auth_me_avatar_create
+      tags:
+      - auth
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AvatarUploadRequest'
+        required: true
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/User'
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+    delete:
+      operationId: auth_me_avatar_destroy
+      tags:
+      - auth
+      security:
+      - SessionCookie: []
+      responses:
+        '204':
+          description: No response body
+      parameters:
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
   /api/auth/register/:
     post:
       operationId: auth_register_create
@@ -1049,6 +1110,240 @@ paths:
         schema:
           type: integer
         description: Campaign ID, membership checked server-side.
+  /api/character-folders/:
+    get:
+      operationId: character_folders_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      tags:
+      - character-folders
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PaginatedCharacterFolderList'
+                  error:
+                    nullable: true
+          description: ''
+    post:
+      operationId: character_folders_create
+      tags:
+      - character-folders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CharacterFolderRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CharacterFolderRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CharacterFolderRequest'
+        required: true
+      security:
+      - SessionCookie: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CharacterFolder'
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+  /api/character-folders/{id}/:
+    get:
+      operationId: character_folders_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this character folder.
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      tags:
+      - character-folders
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CharacterFolder'
+                  error:
+                    nullable: true
+          description: ''
+    patch:
+      operationId: character_folders_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this character folder.
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - character-folders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedCharacterFolderRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedCharacterFolderRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedCharacterFolderRequest'
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CharacterFolder'
+                  error:
+                    nullable: true
+          description: ''
+    delete:
+      operationId: character_folders_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this character folder.
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - character-folders
+      security:
+      - SessionCookie: []
+      responses:
+        '204':
+          description: No response body
   /api/characters/:
     get:
       operationId: characters_list
@@ -1246,6 +1541,43 @@ paths:
                   error:
                     nullable: true
           description: ''
+    delete:
+      operationId: characters_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this character.
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - characters
+      security:
+      - SessionCookie: []
+      responses:
+        '204':
+          description: No response body
   /api/characters/{id}/abilities/:
     get:
       operationId: characters_abilities_list
@@ -1342,6 +1674,118 @@ paths:
                   error:
                     nullable: true
           description: ''
+  /api/characters/{id}/avatar/:
+    get:
+      operationId: characters_avatar_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      tags:
+      - characters
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: characters_avatar_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - characters
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AvatarUploadRequest'
+        required: true
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Character'
+                  error:
+                    nullable: true
+          description: ''
+    delete:
+      operationId: characters_avatar_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - characters
+      security:
+      - SessionCookie: []
+      responses:
+        '204':
+          description: No response body
   /api/characters/{id}/resources/:
     post:
       operationId: characters_resources_create
@@ -1495,6 +1939,69 @@ paths:
                 properties:
                   data:
                     $ref: '#/components/schemas/Sheet'
+                  error:
+                    nullable: true
+          description: ''
+  /api/characters/{id}/spells/catalog/:
+    post:
+      operationId: characters_spells_catalog_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
+      tags:
+      - characters
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Ability'
                   error:
                     nullable: true
           description: ''
@@ -2063,6 +2570,94 @@ paths:
                   error:
                     nullable: true
           description: ''
+  /api/dm/integrations/dmhub/:
+    get:
+      operationId: dm_integrations_dmhub_retrieve
+      tags:
+      - dm
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+    post:
+      operationId: dm_integrations_dmhub_create
+      tags:
+      - dm
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
   /api/dm/overview/:
     get:
       operationId: dm_overview_retrieve
@@ -3232,6 +3827,65 @@ paths:
           maxLength: 100
         description: Reuse the same key and payload after network failure; a different
           payload is rejected.
+  /api/room/table-visibility/:
+    post:
+      operationId: room_table_visibility_create
+      tags:
+      - room
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      - in: header
+        name: X-CSRFToken
+        required: true
+        schema:
+          type: string
+        description: Masked token from GET /api/auth/csrf/.
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: Reuse the same key and payload after network failure; a different
+          payload is rejected.
   /api/schema/:
     get:
       operationId: schema_retrieve
@@ -3786,6 +4440,71 @@ paths:
                   error:
                     nullable: true
           description: ''
+  /api/spells/catalog/:
+    get:
+      operationId: spells_catalog_retrieve
+      tags:
+      - spells
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  error:
+                    nullable: true
+          description: ''
+      parameters:
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+  /api/spells/catalog/{id}/:
+    get:
+      operationId: spells_catalog_retrieve_2
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: campaign
+        required: true
+        schema:
+          type: integer
+        description: Campaign ID, membership checked server-side.
+      tags:
+      - spells
+      security:
+      - SessionCookie: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - error
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  error:
+                    nullable: true
+          description: ''
   /api/campaigns/{id}/stream/:
     get:
       operationId: campaigns_stream
@@ -3816,6 +4535,27 @@ paths:
                 type: string
         '403':
           description: Session expired or campaign access denied
+  /api/integrations/dmhub/events/:
+    get:
+      operationId: dmhub_bridge_events
+      summary: Saved public room rolls for a campaign's DMHub bridge
+      description: Read-only. Dedicated DMHub bearer token, rotated or revoked by
+        campaign DM. No session cookie or CSRF. cursor=latest initializes from now;
+        numeric cursor pages up to 50 committed public roll/ability events. Never
+        returns hidden events or raw payloads.
+      security:
+      - DMHubBridgeToken: []
+      parameters:
+      - name: cursor
+        in: query
+        schema:
+          type: string
+        required: false
+      responses:
+        '200':
+          description: 'JSON envelope: data.events [{id,session,text}], data.cursor'
+        '401':
+          description: Missing, revoked or invalid bearer token
 components:
   schemas:
     Ability:
@@ -3824,11 +4564,29 @@ components:
         id:
           type: integer
           readOnly: true
+        rules_verified:
+          type: boolean
+          nullable: true
+          readOnly: true
+        rules_recurring:
+          type: boolean
+          readOnly: true
+        rules_deferred:
+          type: boolean
+          readOnly: true
+        rules_fixed_dc:
+          type: integer
+          readOnly: true
+        rules_possible_saves:
+          type: array
+          items:
+            type: string
+          readOnly: true
         version:
           type: integer
           readOnly: true
         kind:
-          $ref: '#/components/schemas/KindEnum'
+          $ref: '#/components/schemas/KindCf9Enum'
         name:
           type: string
           maxLength: 100
@@ -3862,6 +4620,8 @@ components:
         upcast_dice:
           type: string
           maxLength: 80
+        upcast_allowed:
+          type: boolean
         roll_count:
           type: integer
           maximum: 9223372036854775807
@@ -3879,7 +4639,7 @@ components:
           maxLength: 3
         casting_time:
           type: string
-          maxLength: 80
+          maxLength: 255
         range:
           type: string
           maxLength: 80
@@ -3893,17 +4653,27 @@ components:
         character:
           type: integer
           readOnly: true
+        catalog_entry:
+          type: integer
+          readOnly: true
+          nullable: true
       required:
+      - catalog_entry
       - character
       - id
       - kind
       - name
+      - rules_deferred
+      - rules_fixed_dc
+      - rules_possible_saves
+      - rules_recurring
+      - rules_verified
       - version
     AbilityRequest:
       type: object
       properties:
         kind:
-          $ref: '#/components/schemas/KindEnum'
+          $ref: '#/components/schemas/KindCf9Enum'
         name:
           type: string
           minLength: 1
@@ -3939,6 +4709,8 @@ components:
         upcast_dice:
           type: string
           maxLength: 80
+        upcast_allowed:
+          type: boolean
         roll_count:
           type: integer
           maximum: 9223372036854775807
@@ -3958,7 +4730,7 @@ components:
         casting_time:
           type: string
           minLength: 1
-          maxLength: 80
+          maxLength: 255
         range:
           type: string
           maxLength: 80
@@ -4015,6 +4787,14 @@ components:
       - session
       - snapshot
       - updated_at
+    AvatarUploadRequest:
+      type: object
+      properties:
+        image:
+          type: string
+          format: binary
+      required:
+      - image
     Campaign:
       type: object
       properties:
@@ -4076,6 +4856,8 @@ components:
         owner:
           type: integer
           readOnly: true
+        kind:
+          $ref: '#/components/schemas/CharacterKindEnum'
         name:
           type: string
           maxLength: 100
@@ -4091,20 +4873,70 @@ components:
           maxLength: 60
         description:
           type: string
-        avatar:
+        avatar_url:
           type: string
-          format: uri
-          maxLength: 200
+          readOnly: true
         active:
           type: boolean
+        folder:
+          type: integer
+          nullable: true
       required:
+      - avatar_url
       - campaign
       - id
       - name
       - owner
+    CharacterFolder:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        campaign:
+          type: integer
+          readOnly: true
+        owner:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 80
+        is_system:
+          type: boolean
+          readOnly: true
+        visible_to_players:
+          type: boolean
+          readOnly: true
+      required:
+      - campaign
+      - id
+      - is_system
+      - name
+      - owner
+      - visible_to_players
+    CharacterFolderRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+      required:
+      - name
+    CharacterKindEnum:
+      enum:
+      - player
+      - npc
+      type: string
+      description: |-
+        * `player` - Player
+        * `npc` - NPC
     CharacterRequest:
       type: object
       properties:
+        kind:
+          $ref: '#/components/schemas/CharacterKindEnum'
         name:
           type: string
           minLength: 1
@@ -4121,12 +4953,11 @@ components:
           maxLength: 60
         description:
           type: string
-        avatar:
-          type: string
-          format: uri
-          maxLength: 200
         active:
           type: boolean
+        folder:
+          type: integer
+          nullable: true
       required:
       - name
     Config:
@@ -4158,6 +4989,14 @@ components:
       - game
       - id
       - version
+    CredentialsAccountRoleEnum:
+      enum:
+      - dm
+      - player
+      type: string
+      description: |-
+        * `dm` - dm
+        * `player` - player
     CredentialsRequest:
       type: object
       properties:
@@ -4175,6 +5014,8 @@ components:
           type: string
           minLength: 1
           maxLength: 80
+        account_role:
+          $ref: '#/components/schemas/CredentialsAccountRoleEnum'
       required:
       - email
       - password
@@ -4362,7 +5203,7 @@ components:
       - id
       - kind
       - session
-    KindEnum:
+    KindCf9Enum:
       enum:
       - attack
       - spell
@@ -4393,6 +5234,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Campaign'
+    PaginatedCharacterFolderList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CharacterFolder'
     PaginatedCharacterList:
       type: object
       required:
@@ -4493,7 +5357,7 @@ components:
           minimum: 1
           description: Current server version; stale values return HTTP 409.
         kind:
-          $ref: '#/components/schemas/KindEnum'
+          $ref: '#/components/schemas/KindCf9Enum'
         name:
           type: string
           minLength: 1
@@ -4529,6 +5393,8 @@ components:
         upcast_dice:
           type: string
           maxLength: 80
+        upcast_allowed:
+          type: boolean
         roll_count:
           type: integer
           maximum: 9223372036854775807
@@ -4548,7 +5414,7 @@ components:
         casting_time:
           type: string
           minLength: 1
-          maxLength: 80
+          maxLength: 255
         range:
           type: string
           maxLength: 80
@@ -4569,9 +5435,18 @@ components:
         description:
           type: string
         settings: {}
+    PatchedCharacterFolderRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
     PatchedCharacterRequest:
       type: object
       properties:
+        kind:
+          $ref: '#/components/schemas/CharacterKindEnum'
         name:
           type: string
           minLength: 1
@@ -4588,12 +5463,11 @@ components:
           maxLength: 60
         description:
           type: string
-        avatar:
-          type: string
-          format: uri
-          maxLength: 200
         active:
           type: boolean
+        folder:
+          type: integer
+          nullable: true
     PatchedConfigRequest:
       type: object
       properties:
@@ -5167,12 +6041,33 @@ components:
           maxLength: 10
         reduced_motion:
           type: boolean
+        account_role:
+          allOf:
+          - $ref: '#/components/schemas/UserAccountRoleEnum'
+          readOnly: true
+        avatar_url:
+          type: string
+          readOnly: true
       required:
+      - account_role
+      - avatar_url
       - email
       - id
+    UserAccountRoleEnum:
+      enum:
+      - dm
+      - player
+      type: string
+      description: |-
+        * `dm` - Master
+        * `player` - Player
   securitySchemes:
     SessionCookie:
       type: apiKey
       in: cookie
       name: sessionid
       description: Django session; unsafe requests additionally require X-CSRFToken.
+    DMHubBridgeToken:
+      type: http
+      scheme: bearer
+      description: Dedicated campaign-scoped key, shown once on rotation.

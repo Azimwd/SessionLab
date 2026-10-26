@@ -70,6 +70,12 @@ class Membership(Timestamped):
         ]
 
 
+class DMHubBridge(Timestamped):
+    campaign = models.OneToOneField(Campaign, on_delete=models.CASCADE, related_name="dmhub_bridge")
+    token_hash = models.CharField(max_length=64)
+    enabled = models.BooleanField(default=True)
+
+
 class CharacterFolder(Timestamped):
     campaign = models.ForeignKey(Campaign, on_delete=models.PROTECT, related_name='character_folders')
     owner = models.ForeignKey(User, on_delete=models.PROTECT)

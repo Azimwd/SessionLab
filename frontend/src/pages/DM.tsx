@@ -1051,7 +1051,7 @@ function Settings() {
   const a = useApp();
   const action = useAction("Настройки кампании сохранены");
   return (
-    <Card>
+    <><Card>
       <h2>Правила вашего пространства</h2>
       <form
         onSubmit={(e) => {
@@ -1095,8 +1095,39 @@ function Settings() {
         </Field>
         <Button disabled={action.isPending}>Сохранить настройки</Button>
       </form>
-    </Card>
+    </Card><DMHubIntegration/></>
   );
+}
+
+function DMHubIntegration() {
+  const a = useApp();
+  const status = useData<Json>(`/dm/integrations/dmhub/?campaign=${a.cid}`);
+  const [token, setToken] = useState('');
+  const [busy, setBusy] = useState(false);
+  const change = async (action: 'rotate'|'revoke') => {
+    setBusy(true);
+    try {
+      const result = await request<Json>(`/dm/integrations/dmhub/?campaign=${a.cid}`, 'POST', {action});
+      setToken(result.token || '');
+      await status.refetch();
+      a.notify(action === 'rotate' ? 'Новый ключ создан. Сохраните его сейчас.' : 'Доступ DMHub отключён.');
+    } catch (error) {
+      a.notify(error instanceof Error ? error.message : 'Не удалось изменить подключение');
+    } finally { setBusy(false); }
+  };
+  return <Card>
+    <h2>DMHub · экспериментальный мост чата</h2>
+    <p className="muted">Отправка публичных бросков и применений заклинаний из этой кампании через локальный мост на компьютере мастера. Секретные броски не передаются.</p>
+    {status.error ? <ErrorBox error={status.error} retry={()=>status.refetch()}/> : <Badge tone={status.data?.enabled?'green':undefined}>{status.data?.enabled?'Ключ активен':'Не подключено'}</Badge>}
+    <div className="actions">
+      <Button disabled={busy} onClick={()=>change('rotate')}>Создать / сменить ключ</Button>
+      {status.data?.enabled && <Button variant="secondary" disabled={busy} onClick={()=>change('revoke')}>Отключить</Button>}
+    </div>
+    {token && <Field label="Ключ показан один раз — вставьте в переменную SESSIONLAB_DMHUB_TOKEN на своём компьютере">
+      <input type="text" readOnly value={token} onFocus={e=>e.currentTarget.select()} autoComplete="off"/>
+    </Field>}
+    <p className="muted">Сначала проверьте, доступен ли в вашей версии DMHub локальный endpoint /execute. Команда /mcp подтверждена для родственного клиента Draw Steel Codex, но не для каждой версии DMHub. Инструкция и ограничения: docs/DMHUB.md.</p>
+  </Card>;
 }
 function Pools() {
   const a = useApp();
