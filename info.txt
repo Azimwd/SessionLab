@@ -14,3 +14,5 @@ $env:DJANGO_DEBUG = "1"
 ./.venv/bin/python manage.py migrate
 
 JHkIAZrwU3FUkrLcUWMIxlAk2eShArndWoRxHq_5iTE8Ge0YFT5d7p3aq4vUkU5_
+
+g2Rijz9WVnUFMfPY-cxYE7LlF09yNRVbudIGeq_TKZVBrGuKZDWusGPBKQk5UXCe
