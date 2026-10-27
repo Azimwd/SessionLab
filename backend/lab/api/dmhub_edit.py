@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from lab.models import CharacterAbility, SpellCatalogEntry
-from lab.services.sheets import controlled_character, sheet_for
+from lab.services.sheets import CONDITIONS, controlled_character, sheet_for
 from .dmhub_sheets import access_for, bridge_payload, response_for, sheet_changed
 from .sheets import AbilitySerializer, SheetSerializer, require_version, spell_catalog_data
 
@@ -33,6 +33,36 @@ class SheetBridgeEdit(PersonalSheetAPI):
             form.is_valid(raise_exception=True)
             form.save(version=sheet.version + 1)
             sheet_changed(campaign, user, char, 'Лист обновлён из DMHub')
+            return form.data
+        return response_for(request, access, change)
+
+
+class SheetBridgeConditions(PersonalSheetAPI):
+    """Apply an explicit user's delta to the latest row, not a stale full snapshot."""
+    @extend_schema(request=OpenApiTypes.OBJECT, responses=SheetSerializer)
+    def post(self, request, pk):
+        access, data = access_for(request), bridge_payload(request)
+        changes = {}
+        for key in ('add', 'remove'):
+            values = data.get(key, [])
+            if values == {}:  # Native Lua represents an empty array this way.
+                values = []
+            if not isinstance(values, list) or any(type(v) is not str or v not in CONDITIONS for v in values):
+                raise ValidationError('Некорректные состояния')
+            changes[key] = set(values)
+        if changes['add'] & changes['remove']:
+            raise ValidationError('Нельзя одновременно добавить и снять одно состояние')
+
+        def change(campaign, user):
+            char = controlled_character(campaign, user, pk)
+            sheet = sheet_for(char)
+            conditions = [v for v in sheet.conditions if v not in changes['remove']]
+            conditions += [v for v in CONDITIONS if v in changes['add'] and v not in conditions]
+            form = SheetSerializer(sheet, data={'conditions': conditions}, partial=True)
+            form.is_valid(raise_exception=True)
+            if conditions != sheet.conditions:
+                form.save(version=sheet.version + 1)
+                sheet_changed(campaign, user, char, 'Состояния обновлены из DMHub')
             return form.data
         return response_for(request, access, change)
 

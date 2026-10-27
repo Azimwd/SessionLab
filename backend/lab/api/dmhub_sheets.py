@@ -7,6 +7,7 @@ import secrets
 
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import transaction
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
@@ -16,7 +17,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from lab.models import (
-    AuditLog, Campaign, Character, DMHubSheetAccess, IdempotencyRecord, Membership,
+    AuditLog, Campaign, Character, CharacterFolder, DMHubSheetAccess, IdempotencyRecord, Membership,
 )
 from lab.services.sheets import controlled_character, event, perform_roll, sheet_for, use_ability
 from .common import campaign_for, is_dm
@@ -155,9 +156,16 @@ class SheetBridge(APIView):
         chars = Character.objects.filter(campaign=access.campaign, active=True)
         if not is_dm(access.campaign, access.user):
             chars = chars.filter(owner=access.user)
-        return Response({'campaign': access.campaign.name, 'characters': [
+        folders = CharacterFolder.objects.filter(campaign=access.campaign)
+        if not is_dm(access.campaign, access.user):
+            folders = folders.filter(Q(is_system=True) | Q(owner=access.user) |
+                                     Q(pk__in=chars.values('folder_id')))
+        return Response({'campaign': access.campaign.name,
+            'folders': [{'id': f.pk, 'name': f.name, 'is_system': f.is_system}
+                        for f in folders.order_by('-is_system', 'name', 'pk')],
+            'characters': [
             {'id': c.pk, 'name': c.name, 'class': c.character_class,
-             'level': c.level, 'kind': c.kind}
+             'level': c.level, 'kind': c.kind, 'folder': c.folder_id}
             for c in chars.order_by('name', 'pk')[:100]
         ]})
 

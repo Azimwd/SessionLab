@@ -1,7 +1,7 @@
 import pytest
 from rest_framework.test import APIClient
 
-from lab.models import CharacterAbility, RoomEvent, SpellCatalogEntry
+from lab.models import CharacterAbility, CharacterFolder, RoomEvent, SpellCatalogEntry
 from .test_api import client, post, scoped, world
 
 
@@ -104,3 +104,47 @@ def test_native_edit_permissions_and_validation(world, native):
         assert post(api, root + 'edit/', {'version': current['version'], **patch}).status_code == 400
     assert api.get(root).json()['data']['sheet']['version'] == current['version']
     assert APIClient().get('/api/integrations/dmhub/catalog/').status_code in (401, 403)
+
+
+def test_native_conditions_delta_preserves_concurrent_edits(world, native):
+    api, root = native
+    sheet = api.get(root).json()['data']['sheet']
+    # A browser changes HP and another condition while the native form is open.
+    browser = post(api, root + 'edit/', {'version': sheet['version'], 'hp_current': 7,
+                                        'conditions': ['Испуган']})
+    assert browser.status_code == 200
+    change = {'add': ['Ослеплён'], 'remove': {}}
+    saved = post(api, root + 'conditions/', change, key='delta-condition-save')
+    assert saved.status_code == 200, saved.json()
+    value = saved.json()['data']
+    assert set(value['conditions']) == {'Ослеплён', 'Испуган'}
+    assert value['hp_current'] == 7
+    assert post(api, root + 'conditions/', change, key='delta-condition-save').json() == saved.json()
+    assert api.get(root).json()['data']['sheet']['version'] == value['version']
+    removed = post(api, root + 'conditions/', {'add': {}, 'remove': ['Ослеплён']})
+    assert removed.json()['data']['conditions'] == ['Испуган']
+    for bad in ({'add': ['fake']}, {'remove': ['fake']}, {'add': 'Ослеплён'}, {'add': ['Ослеплён'], 'remove': ['Ослеплён']}):
+        assert post(api, root + 'conditions/', bad).status_code == 400
+    other = world[3].character_set.create(owner=world[0], name='Other')
+    assert post(api, f'/api/integrations/dmhub/sheets/{other.pk}/conditions/', change).status_code == 403
+
+
+def test_native_character_picker_has_real_folders_with_scoped_access(world, native):
+    dm, player, _, campaign, character, _ = world
+    api, _ = native
+    hidden = CharacterFolder.objects.create(campaign=campaign, owner=dm, name='Secret NPC')
+    own = CharacterFolder.objects.create(campaign=campaign, owner=player, name='My companions')
+    npc = campaign.character_set.create(owner=dm, name='Hidden NPC', kind='npc', folder=hidden)
+    companion = campaign.character_set.create(owner=player, name='Companion', kind='npc', folder=own)
+    loose = campaign.character_set.create(owner=dm, name='Unfiled', kind='npc')
+    root = '/api/integrations/dmhub/sheets/'
+    data = api.get(root).json()['data']
+    assert {c['id'] for c in data['characters']} == {character.pk, companion.pk}
+    assert {f['id'] for f in data['folders']} == {character.folder_id, own.pk}
+    assert next(c for c in data['characters'] if c['id'] == companion.pk)['folder'] == own.pk
+    token = post(client(dm), scoped('/api/integrations/dmhub/sheet-access/', campaign),
+                 {'action': 'rotate'}).json()['data']['token']
+    master = APIClient(HTTP_AUTHORIZATION='Bearer ' + token).get(root).json()['data']
+    assert hidden.pk in {f['id'] for f in master['folders']}
+    assert next(c for c in master['characters'] if c['id'] == npc.pk)['folder'] == hidden.pk
+    assert next(c for c in master['characters'] if c['id'] == loose.pk)['folder'] is None
