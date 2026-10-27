@@ -1,3 +1,4 @@
+import pytest
 from rest_framework.test import APIClient
 
 from lab.models import Campaign, CharacterAbility, DMHubBridge, DMHubSheetAccess, Membership, RoomEvent
@@ -146,6 +147,47 @@ def test_sheet_key_never_accepts_campaign_chat_key(world):
                  {'action': 'rotate'}).json()['data']['token']
     c = APIClient(HTTP_AUTHORIZATION='Bearer ' + token)
     assert c.get('/api/integrations/dmhub/sheets/').status_code in (401, 403)
+
+
+def test_sheet_bridge_lua_whole_numbers_and_invalid_fractions(world):
+    _, player, _, campaign, character, _ = world
+    personal = post(client(player), scoped('/api/integrations/dmhub/sheet-access/', campaign),
+                    {'action': 'rotate'}).json()['data']['token']
+    bearer = APIClient(HTTP_AUTHORIZATION='Bearer ' + personal)
+    root = f'/api/integrations/dmhub/sheets/{character.pk}/'
+    sheet = bearer.get(root).json()['data']['sheet']
+    response = post(bearer, root + 'resources/', {'action': 'damage', 'amount': 2.0},
+                    key='lua-resource-key')
+    assert response.status_code == 200, response.json()
+    assert response.json()['data']['hp_current'] == sheet['hp_current'] - 2
+    assert post(bearer, root + 'resources/', {'action': 'damage', 'amount': 2.0},
+                key='lua-resource-key').json() == response.json()
+    ability = CharacterAbility.objects.create(character=character, name='Lua spell',
+        kind='spell', level=1, resolution='save', dice='2d6')
+    sheet_model = character.sheet
+    sheet_model.slots['1']['max'] = 1
+    sheet_model.save()
+    use = root + f'abilities/{ability.pk}/use/'
+    for value in (1.5, True, '1', None, -1.0, 10.0):
+        assert post(bearer, use, {'slot_level': value}).status_code == 400
+    result = post(bearer, use, {'slot_level': 1.0}, key='lua-cast-key')
+    assert result.status_code == 200, result.json()
+    assert result.json()['data']['payload']['slot_level'] == 1
+    assert post(bearer, use, {'slot_level': 1.0}, key='lua-cast-key').json() == result.json()
+    sheet_model.refresh_from_db()
+    assert sheet_model.slots['1']['used'] == 1
+    for value in (0.5, True, '2', None, -1.0, 10001.0):
+        assert post(bearer, root + 'resources/', {'action': 'damage', 'amount': value}).status_code == 400
+    sheet_model.refresh_from_db()
+    assert sheet_model.hp_current == sheet['hp_current'] - 2
+
+
+@pytest.mark.parametrize('value', [float('nan'), float('inf'), float('-inf'), 1.25, True, '1', None])
+def test_sheet_bridge_integer_rejects_non_integral_values(value):
+    from rest_framework.exceptions import ValidationError
+    from lab.api.dmhub_sheets import bridge_integer
+    with pytest.raises(ValidationError):
+        bridge_integer(value, 'amount')
 
 
 def test_sheet_bridge_player_cannot_use_other_members_sheet(world):

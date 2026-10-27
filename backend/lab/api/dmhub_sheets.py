@@ -2,6 +2,7 @@
 import hashlib
 import hmac
 import json
+import math
 import secrets
 
 from django.core.serializers.json import DjangoJSONEncoder
@@ -24,6 +25,15 @@ from .sheets import AbilitySerializer, EventSerializer, SheetSerializer
 
 def digest(token):
     return hashlib.sha256(token.encode('ascii')).hexdigest()
+
+
+def bridge_integer(value, field):
+    """Lua JSON encoders may represent whole numbers as 3.0; never round."""
+    if type(value) is int:
+        return value
+    if type(value) is float and math.isfinite(value) and value.is_integer():
+        return int(value)
+    raise ValidationError({field: 'Ожидается целое число'})
 
 
 class SheetAccessSettings(APIView):
@@ -174,6 +184,8 @@ class SheetBridgeUse(APIView):
         char = controlled_character(access.campaign, access.user, pk)
         ability = get_object_or_404(char.actions, pk=ability_pk, active=True)
         data = {k: request.data[k] for k in ('slot_level', 'mode', 'trigger') if k in request.data}
+        if 'slot_level' in data:
+            data['slot_level'] = bridge_integer(data['slot_level'], 'slot_level')
         data['visibility'] = 'public'
         return response_for(request, access, lambda c, u: EventSerializer(
             use_ability(c, u, ability.pk, data)
@@ -188,7 +200,8 @@ class SheetBridgeResource(APIView):
     def post(self, request, pk):
         access = access_for(request)
         action, amount = request.data.get('action'), request.data.get('amount')
-        if action not in ('damage', 'heal', 'temporary') or type(amount) is not int or not 0 <= amount <= 10000:
+        amount = bridge_integer(amount, 'amount')
+        if action not in ('damage', 'heal', 'temporary') or not 0 <= amount <= 10000:
             raise ValidationError('Укажите damage, heal или temporary и целое число 0–10000')
 
         def change(campaign, user):
