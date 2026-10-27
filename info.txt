@@ -12,3 +12,5 @@ $env:DJANGO_DEBUG = "1"
 & .\.venv\Scripts\python.exe .\backend\manage.py runserver 8000
 
 ./.venv/bin/python manage.py migrate
+
+JHkIAZrwU3FUkrLcUWMIxlAk2eShArndWoRxHq_5iTE8Ge0YFT5d7p3aq4vUkU5_

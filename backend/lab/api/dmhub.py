@@ -60,11 +60,14 @@ def _line(event):
 
     who = clean(p.get("character_name") or "Мастер", 100)
     label = clean(p.get("label") or "Бросок", 120)
+    display = {"primary": None, "secondary": None, "detail": ""}
     if event.kind == "roll":
         result = p.get("roll") or {}
         text = f"{who}: {label} — {result.get('total', '?')}"
+        display["primary"] = {"label": "Бросок", "value": result.get("total", "?")}
         if result.get("formula"):
             text += f" ({result['formula']})"
+            display["detail"] = clean(result["formula"], 100)
     else:
         level = p.get("slot_level")
         level_text = f", ячейка {level}" if p.get("kind") == "spell" and level else ""
@@ -86,6 +89,26 @@ def _line(event):
         if not any(details) and p.get("description"):
             details = [clean(p["description"], 220)]
         text = f"{who}: {label}{level_text}" + (" — " + "; ".join(filter(None, details)) if any(details) else "")
+        first = parts[0] if parts else {}
+        if first.get("roll"):
+            display["primary"] = {"label": "Атака", "value": first["roll"].get("total", "?")}
+        if first.get("damage"):
+            damage = {"label": "Урон", "value": first["damage"].get("total", "?")}
+            display["secondary" if display["primary"] else "primary"] = damage
+        if first.get("save"):
+            save = first["save"]
+            dc = {"label": "СЛ спасброска", "value": save.get("dc", "?")}
+            display["secondary" if display["primary"] else "primary"] = dc
+            if "failed_damage" in save:
+                display["detail"] = (
+                    f"Провал {save['failed_damage']} · успех {save.get('success_damage', 0)}"
+                )
+        if len(parts) > 1:
+            display["detail"] = f"{len(parts)} бросков · всего урона {p.get('total_damage', '?')}"
+        elif level_text:
+            display["detail"] = f"Ячейка {level}" + (
+                f" · {display['detail']}" if display["detail"] else ""
+            )
     # Structured presentation lets the DMHub mod create a titled message while
     # retaining `text` for older bridge versions. Never expose the raw payload.
     summary = text.split(" — ", 1)[1] if " — " in text else ""
@@ -94,7 +117,7 @@ def _line(event):
     return {
         "id": event.pk, "session": event.session_id, "text": text[:900],
         "actor": who, "title": label, "kind": event.kind,
-        "summary": summary[:700],
+        "summary": summary[:700], "display": display,
     }
 
 
