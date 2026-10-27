@@ -20,7 +20,7 @@ from lab.models import (
 )
 from lab.services.sheets import controlled_character, event, perform_roll, sheet_for, use_ability
 from .common import campaign_for, is_dm
-from .sheets import AbilitySerializer, EventSerializer, SheetSerializer
+from .sheets import AbilitySerializer, EventSerializer, SheetSerializer, require_version
 
 
 def digest(token):
@@ -34,6 +34,31 @@ def bridge_integer(value, field):
     if type(value) is float and math.isfinite(value) and value.is_integer():
         return int(value)
     raise ValidationError({field: 'Ожидается целое число'})
+
+
+def bridge_payload(request):
+    """Normalize the native Lua encoder without rounding or weakening validation."""
+    def normalize(value):
+        if type(value) is float:
+            return bridge_integer(value, 'number')
+        if isinstance(value, dict):
+            return {str(k): normalize(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [normalize(v) for v in value]
+        return value
+    if not isinstance(request.data, dict):
+        raise ValidationError('Ожидается JSON-объект')
+    data = normalize(request.data)
+    for key in ('saves', 'conditions'):
+        if data.get(key) == {}:
+            data[key] = []
+    return data
+
+
+def sheet_changed(campaign, user, char, label):
+    session = campaign.sessions.filter(status='active').first()
+    if session:
+        event(campaign, session, user, char, 'sheet', {'label': label})
 
 
 class SheetAccessSettings(APIView):
@@ -199,9 +224,10 @@ class SheetBridgeResource(APIView):
     @extend_schema(request=OpenApiTypes.OBJECT, responses=OpenApiTypes.OBJECT)
     def post(self, request, pk):
         access = access_for(request)
-        action, amount = request.data.get('action'), request.data.get('amount')
-        amount = bridge_integer(amount, 'amount')
-        if action not in ('damage', 'heal', 'temporary') or not 0 <= amount <= 10000:
+        data = bridge_payload(request)
+        action = data.get('action')
+        amount = bridge_integer(data.get('amount', 0), 'amount')
+        if action not in ('damage', 'heal', 'temporary', 'restore_slots') or not 0 <= amount <= 10000:
             raise ValidationError('Укажите damage, heal или temporary и целое число 0–10000')
 
         def change(campaign, user):
@@ -215,15 +241,18 @@ class SheetBridgeResource(APIView):
                 sheet.hp_current = min(sheet.hp_max, sheet.hp_current + amount)
                 if sheet.hp_current:
                     sheet.death_successes = sheet.death_failures = 0
-            else:
+            elif action == 'temporary':
                 sheet.hp_temp = max(sheet.hp_temp, amount)
+            else:
+                require_version(sheet, data)
+                sheet.slots = {k: {**v, 'used': 0} for k, v in sheet.slots.items()}
             sheet.version += 1
             sheet.save()
             session = campaign.sessions.filter(status='active').first()
             if session:
                 event(campaign, session, user, char, 'resource', {
                     'label': {'damage': 'Получен урон', 'heal': 'Восстановлены хиты',
-                              'temporary': 'Временные хиты'}[action],
+                              'temporary': 'Временные хиты', 'restore_slots': 'Восстановлены ячейки'}[action],
                     'amount': amount, 'hp_current': sheet.hp_current, 'hp_max': sheet.hp_max,
                 })
             return SheetSerializer(sheet).data

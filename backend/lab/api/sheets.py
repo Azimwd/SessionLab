@@ -304,67 +304,70 @@ class AbilitiesView(APIView):
         return mutate(request, None, op)
 
 
+def spell_catalog_data(params):
+    qs = SpellCatalogEntry.objects.filter(active=True)
+    q = params.get("q", "").strip()[:100]
+    if q:
+        from django.db.models import Q
+        from django.db import connection
+        if connection.vendor == 'sqlite':
+            # SQLite's LIKE/LOWER do not case-fold Cyrillic. The SRD index is
+            # small and this keeps local search consistent with PostgreSQL.
+            needle = q.casefold()
+            ids = [row['id'] for row in qs.values('id','name_ru','name_en','template')
+                   if any(needle in str(value).casefold() for value in
+                          (row['name_ru'],row['name_en'],row['template'].get('translated_name',''),row['template'].get('description',''),row['template'].get('source_en','')))]
+            qs = qs.filter(pk__in=ids)
+        else:
+            qs = qs.filter(Q(name_ru__icontains=q) | Q(name_en__icontains=q) | Q(template__translated_name__icontains=q) | Q(template__description__icontains=q) | Q(template__source_en__icontains=q))
+    level = params.get("level")
+    if level is not None:
+        try:
+            level = int(level)
+        except ValueError:
+            raise ValidationError("Некорректный уровень")
+        if not 0 <= level <= 9:
+            raise ValidationError("Некорректный уровень")
+        qs = qs.filter(level=level)
+    from lab.data.spell_metadata import CLASS_NAMES, SCHOOL_NAMES, catalog_names
+    cls = params.get('class', '')
+    school = params.get('school', '')
+    if cls and cls not in CLASS_NAMES:
+        raise ValidationError('Неизвестный класс')
+    if school and school not in SCHOOL_NAMES:
+        raise ValidationError('Неизвестная школа магии')
+    if cls or school:
+        qs = qs.filter(name_en__in=catalog_names(cls, school))
+    status = params.get('status', '')
+    if status not in ['', 'verified', 'reference']:
+        raise ValidationError('Неизвестный статус правил')
+    if status:
+        qs = qs.filter(template__verified=status == 'verified')
+    sort = params.get('sort', 'level')
+    if sort not in ['level', 'name', '-level']:
+        raise ValidationError('Неизвестная сортировка')
+    qs = qs.order_by(*({'level': ('level','name_ru'), 'name': ('name_ru',), '-level': ('-level','name_ru')}[sort]))
+    offset = params.get("offset", "0")
+    try:
+        offset = int(offset)
+    except ValueError:
+        raise ValidationError("Некорректное смещение")
+    if not 0 <= offset <= 10000:
+        raise ValidationError("Некорректное смещение")
+    total = qs.count()
+    return {"count": total, "results": [
+        {"id": entry.pk, "code": entry.code, "name_ru": entry.name_ru,
+         "name_en": entry.name_en, "level": entry.level, "edition": entry.edition,
+         "source": entry.source, "rules": entry.template}
+        for entry in qs[offset:offset+30]
+    ]}
+
+
 class SpellCatalogView(APIView):
     @extend_schema(responses=OpenApiTypes.OBJECT)
     def get(self, request):
         campaign_for(request)
-        qs = SpellCatalogEntry.objects.filter(active=True)
-        q = request.query_params.get("q", "").strip()[:100]
-        if q:
-            from django.db.models import Q
-            from django.db import connection
-            if connection.vendor == 'sqlite':
-                # SQLite's LIKE/LOWER do not case-fold Cyrillic. The SRD index is
-                # small and this keeps local search consistent with PostgreSQL.
-                needle = q.casefold()
-                ids = [row['id'] for row in qs.values('id','name_ru','name_en','template')
-                       if any(needle in str(value).casefold() for value in
-                              (row['name_ru'],row['name_en'],row['template'].get('translated_name',''),row['template'].get('description',''),row['template'].get('source_en','')))]
-                qs = qs.filter(pk__in=ids)
-            else:
-                qs = qs.filter(Q(name_ru__icontains=q) | Q(name_en__icontains=q) | Q(template__translated_name__icontains=q) | Q(template__description__icontains=q) | Q(template__source_en__icontains=q))
-        level = request.query_params.get("level")
-        if level is not None:
-            try:
-                level = int(level)
-            except ValueError:
-                raise ValidationError("Некорректный уровень")
-            if not 0 <= level <= 9:
-                raise ValidationError("Некорректный уровень")
-            qs = qs.filter(level=level)
-        from lab.data.spell_metadata import CLASS_NAMES, SCHOOL_NAMES, catalog_names
-        cls = request.query_params.get('class', '')
-        school = request.query_params.get('school', '')
-        if cls and cls not in CLASS_NAMES:
-            raise ValidationError('Неизвестный класс')
-        if school and school not in SCHOOL_NAMES:
-            raise ValidationError('Неизвестная школа магии')
-        if cls or school:
-            qs = qs.filter(name_en__in=catalog_names(cls, school))
-        status = request.query_params.get('status', '')
-        if status not in ['', 'verified', 'reference']:
-            raise ValidationError('Неизвестный статус правил')
-        if status:
-            qs = qs.filter(template__verified=status == 'verified')
-        sort = request.query_params.get('sort', 'level')
-        if sort not in ['level', 'name', '-level']:
-            raise ValidationError('Неизвестная сортировка')
-        qs = qs.order_by(*({'level': ('level','name_ru'), 'name': ('name_ru',), '-level': ('-level','name_ru')}[sort]))
-        offset = request.query_params.get("offset", "0")
-        try:
-            offset = int(offset)
-        except ValueError:
-            raise ValidationError("Некорректное смещение")
-        if not 0 <= offset <= 10000:
-            raise ValidationError("Некорректное смещение")
-        total = qs.count()
-        return Response({"count": total, "results": [
-            {"id": entry.pk, "code": entry.code, "name_ru": entry.name_ru,
-             "name_en": entry.name_en, "level": entry.level, "edition": entry.edition,
-             "source": entry.source, "rules": entry.template}
-            for entry in qs[offset:offset+30]
-        ]})
-
+        return Response(spell_catalog_data(request.query_params))
 
 class SpellCatalogDetail(APIView):
     @extend_schema(responses=OpenApiTypes.OBJECT)
