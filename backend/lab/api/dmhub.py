@@ -87,7 +87,10 @@ def _line(event):
                     fragments.append(f"провал {save['failed_damage']}, успех {save.get('success_damage', 0)}")
             details.append(", ".join(fragments))
         if not any(details) and p.get("description"):
-            details = [clean(p["description"], 220)]
+            # Keep chat messages compact, but let the DMHub panel show the
+            # entire public action description in its scrollable card.
+            display["description"] = clean(p["description"], 10000)
+            details = [display["description"][:220]]
         text = f"{who}: {label}{level_text}" + (" — " + "; ".join(filter(None, details)) if any(details) else "")
         first = parts[0] if parts else {}
         if first.get("roll"):

@@ -36,8 +36,12 @@ def test_dmhub_bridge_only_public_scoped_saved_events(world):
     second = event(campaign, session, player, character, 'roll', {
         'label': 'Восприятие', 'roll': {'total': 18, 'formula': '1d20+3'}
     })
+    description = 'Дубинка становится живым деревом. ' + 'Его ветви удерживают врагов. ' * 18
+    third = event(campaign, session, player, character, 'ability', {
+        'label': 'Пробуждение дерева', 'description': description,
+    })
     batch = consumer.get(feed + '?cursor=0').json()['data']
-    assert [e['id'] for e in batch['events']] == [first.pk, second.pk]
+    assert [e['id'] for e in batch['events']] == [first.pk, second.pk, third.pk]
     assert 'Огненный шар' in batch['events'][0]['text']
     assert 'СЛ 15' in batch['events'][0]['text']
     assert 'провал 29, успех 14' in batch['events'][0]['text']
@@ -54,6 +58,8 @@ def test_dmhub_bridge_only_public_scoped_saved_events(world):
         'primary': {'label': 'Бросок', 'value': 18},
         'secondary': None, 'detail': '1d20+3',
     }
+    assert len(batch['events'][2]['summary']) < len(description)
+    assert batch['events'][2]['display']['description'] == description.strip()
     assert 'Секрет' not in str(batch)
     assert consumer.get(feed + '?cursor=' + str(batch['cursor'])).json()['data']['events'] == []
     assert consumer.get(feed + '?cursor=-1').status_code == 400
