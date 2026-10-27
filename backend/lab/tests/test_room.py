@@ -764,7 +764,7 @@ def test_extended_spell_presets_and_legacy_catalog_action(world):
     entry = SpellCatalogEntry.objects.get(name_en='Spiritual Weapon')
     legacy = CharacterAbility.objects.create(
         character=char, catalog_entry=entry, kind='spell', name=entry.name_ru,
-        level=2, resolution='automatic', dice='', ability='int',
+        level=2, resolution='automatic', dice='', ability='wis',
     )
     call_command('seed_spells', verbosity=0)
     legacy.refresh_from_db()
@@ -877,3 +877,33 @@ def test_fixed_dc_and_repeated_spell_save_can_change_ability(world):
             assert repeat['save'] == {'ability':'con','dc':10,'failed_damage':18,'success_damage':9}
     sheet.refresh_from_db()
     assert sheet.slots['5']['used'] == sheet.slots['7']['used'] == 1
+
+
+@pytest.mark.parametrize('spell_code,resolution', [('srd51-ray-of-frost', 'attack'), ('srd51-sacred-flame', 'save')])
+def test_catalog_spell_uses_saved_characteristic_after_edit(world, spell_code, resolution):
+    dm, player, outsider, campaign, char, session = world
+    sheet = sheet_for(char)
+    sheet.spell_ability = 'int'
+    sheet.abilities = {**sheet.abilities, 'str': 18, 'int': 10}
+    sheet.save()
+    entry = SpellCatalogEntry.objects.get(code=spell_code)
+    api = client(player)
+    added = post(api, scoped(f'/api/characters/{char.pk}/spells/catalog/', campaign), {'spell_id': entry.pk})
+    assert added.status_code == 200, added.content
+    action = added.json()['data']
+    saved = patch_api(api, scoped(f'/api/abilities/{action["id"]}/', campaign),
+                      {'version': action['version'], 'ability': 'str'}, key='change-casting-stat')
+    assert saved.status_code == 200, saved.content
+    obj = CharacterAbility.objects.get(pk=action['id'])
+    assert obj.ability == 'str'
+    with patch('lab.services.dice.secrets.randbelow', return_value=2):
+        result = post(api, scoped(f'/api/abilities/{obj.pk}/use/', campaign), {'slot_level': 0})
+    assert result.status_code == 200, result.content
+    payload = result.json()['data']['payload']
+    assert payload['casting_ability'] == 'str'
+    assert payload['spell_attack_bonus'] == 6
+    assert payload['spell_save_dc'] == 14
+    if resolution == 'attack':
+        assert payload['roll']['total'] == 9
+    else:
+        assert payload['save']['dc'] == 14
