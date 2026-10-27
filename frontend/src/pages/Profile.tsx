@@ -26,7 +26,7 @@ import {
   Loading,
   Confirm,
 } from "../components/ui";
-import type { Json } from "../api/client";
+import { request, type Json } from "../api/client";
 export default function Profile() {
   const a = useApp();
   const [modal, setModal] = useState(""),
@@ -152,6 +152,7 @@ export default function Profile() {
           </div>
         </Card>
       </div>
+      {!!a.cid && <DMHubSheetKey campaign={a.cid}/>}
       <div className="section-title spacer">
         <h2>Мои персонажи</h2>
         <Button
@@ -398,4 +399,32 @@ export default function Profile() {
       {deleting&&<Confirm title={`Удалить «${deleting.name}»?`} text="Персонаж исчезнет из списка, история останется." busy={action.isPending} onClose={()=>setDeleting(null)} onConfirm={()=>action.mutate({path:`/characters/${deleting.id}/?campaign=${a.cid}`,method:'DELETE'},{onSuccess:()=>{if(a.charId===String(deleting.id))a.selectCharacter('');setDeleting(null);}})}/>}
     </>
   );
+}
+
+function DMHubSheetKey({campaign}:{campaign:string}) {
+  const a=useApp();
+  const status=useData<Json>(`/integrations/dmhub/sheet-access/?campaign=${campaign}`);
+  const [token,setToken]=useState('');
+  const [busy,setBusy]=useState(false);
+  const change=async (action:'rotate'|'revoke')=>{
+    setBusy(true);
+    try {
+      const result=await request<Json>(`/integrations/dmhub/sheet-access/?campaign=${campaign}`,'POST',{action});
+      setToken(result.token||'');
+      await status.refetch();
+      a.notify(action==='rotate'?'Ключ листа создан. Скопируйте его сейчас.':'Ключ листа отключён.');
+    } catch(error){a.notify(error instanceof Error?error.message:'Не удалось изменить ключ');}
+    finally{setBusy(false);}
+  };
+  return <Card>
+    <h2>Мой лист в DMHub</h2>
+    <p className="muted">Отдельный ключ только для ваших листов в выбранной кампании. Мастер с правами кампании может открывать её листы. Ключ показывается один раз; храните его как пароль.</p>
+    {status.error?<ErrorBox error={status.error} retry={()=>status.refetch()}/>:<Badge tone={status.data?.enabled?'green':undefined}>{status.data?.enabled?'Подключение разрешено':'Не подключено'}</Badge>}
+    <div className="actions">
+      <Button disabled={busy} onClick={()=>change('rotate')}>Создать / сменить ключ листа</Button>
+      {status.data?.enabled&&<Button variant="secondary" disabled={busy} onClick={()=>change('revoke')}>Отключить ключ</Button>}
+    </div>
+    {token&&<Field label="Скопируйте в SHEET_TOKEN мода DMHub"><input readOnly type="text" value={token} onFocus={e=>e.currentTarget.select()} autoComplete="off"/></Field>}
+    <p className="muted">Ключ чата мастера и ключ листа различаются. Инструкция: docs/DMHUB.md.</p>
+  </Card>;
 }

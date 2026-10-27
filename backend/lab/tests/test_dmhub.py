@@ -1,6 +1,6 @@
 from rest_framework.test import APIClient
 
-from lab.models import Campaign, DMHubBridge, Membership, RoomEvent
+from lab.models import Campaign, CharacterAbility, DMHubBridge, DMHubSheetAccess, Membership, RoomEvent
 from lab.services.sheets import event
 from .test_api import client, post, scoped, world
 
@@ -82,3 +82,86 @@ def test_lua_chat_message_is_code_safe():
     assert code.startswith('chat.Send(string.char(')
     assert 'os.execute' not in code
     assert 'bad' not in code
+
+
+def test_sheet_bridge_bound_to_member_and_idempotent(world):
+    dm, player, outsider, campaign, character, session = world
+    settings = scoped('/api/integrations/dmhub/sheet-access/', campaign)
+    created = post(client(player), settings, {'action': 'rotate'})
+    assert created.status_code == 200
+    token = created.json()['data']['token']
+    assert token not in str(DMHubSheetAccess.objects.get(user=player).__dict__)
+    bearer = APIClient(HTTP_AUTHORIZATION='Bearer ' + token)
+    root = '/api/integrations/dmhub/sheets/'
+    assert bearer.get(root).json()['data']['characters'][0]['id'] == character.pk
+    detail = bearer.get(f'{root}{character.pk}/').json()['data']
+    assert detail['sheet']['computed']['skills']['perception'] == 0
+    assert bearer.get(root, HTTP_AUTHORIZATION='Bearer nonsense').status_code in (401, 403)
+    other = Campaign.objects.create(name='Other', owner=outsider)
+    Membership.objects.create(campaign=other, user=outsider, role='dm')
+    foreign = other.character_set.create(owner=outsider, name='Secret')
+    assert bearer.get(f'{root}{foreign.pk}/').status_code == 404
+
+    roll = f'{root}{character.pk}/roll/'
+    first = post(bearer, roll, {'kind': 'skill', 'key': 'perception'}, key='same-roll-key')
+    assert first.status_code == 200
+    again = post(bearer, roll, {'kind': 'skill', 'key': 'perception'}, key='same-roll-key')
+    assert again.json() == first.json()
+    assert RoomEvent.objects.filter(campaign=campaign, kind='roll').count() == 1
+    assert post(bearer, roll, {'kind': 'skill', 'key': 'arcana'}, key='same-roll-key').status_code == 400
+    assert post(bearer, roll, {'kind': 'skill', 'key': 'perception'}).status_code == 200
+
+    resource = f'{root}{character.pk}/resources/'
+    health = post(bearer, resource, {'action': 'damage', 'amount': 4}, key='same-damage-key')
+    assert health.status_code == 200
+    assert health.json()['data']['hp_current'] == 6
+    assert post(bearer, resource, {'action': 'damage', 'amount': 4}, key='same-damage-key').json() == health.json()
+    assert bearer.get(f'{root}{character.pk}/').json()['data']['sheet']['hp_current'] == 6
+
+    spell = CharacterAbility.objects.create(character=character, name='Test spell',
+                                            kind='spell', level=1, resolution='save', dice='2d6')
+    sheet = character.sheet
+    sheet.slots['1']['max'] = 1
+    sheet.save()
+    use = f'{root}{character.pk}/abilities/{spell.pk}/use/'
+    response = post(bearer, use, {'slot_level': 1}, key='one-cast-key')
+    assert response.status_code == 200, response.json()
+    assert post(bearer, use, {'slot_level': 1}, key='one-cast-key').json() == response.json()
+    sheet.refresh_from_db()
+    assert sheet.slots['1']['used'] == 1
+    assert post(bearer, use, {'slot_level': 1}).status_code == 400
+    assert RoomEvent.objects.filter(campaign=campaign, kind='ability').count() == 1
+
+    rotated = post(client(player), settings, {'action': 'rotate'}).json()['data']['token']
+    assert bearer.get(root).status_code in (401, 403)
+    fresh = APIClient(HTTP_AUTHORIZATION='Bearer ' + rotated)
+    assert fresh.get(root).status_code == 200
+    Membership.objects.filter(campaign=campaign, user=player).update(active=False)
+    assert fresh.get(root).status_code == 403
+
+
+def test_sheet_key_never_accepts_campaign_chat_key(world):
+    dm, player, _, campaign, character, _ = world
+    token = post(client(dm), scoped('/api/dm/integrations/dmhub/', campaign),
+                 {'action': 'rotate'}).json()['data']['token']
+    c = APIClient(HTTP_AUTHORIZATION='Bearer ' + token)
+    assert c.get('/api/integrations/dmhub/sheets/').status_code in (401, 403)
+
+
+def test_sheet_bridge_player_cannot_use_other_members_sheet(world):
+    dm, player, outsider, campaign, character, _ = world
+    second = campaign.character_set.create(owner=dm, name='Keeper')
+    personal = post(client(player), scoped('/api/integrations/dmhub/sheet-access/', campaign),
+                    {'action': 'rotate'}).json()['data']['token']
+    p = APIClient(HTTP_AUTHORIZATION='Bearer ' + personal)
+    root = '/api/integrations/dmhub/sheets/'
+    assert [x['id'] for x in p.get(root).json()['data']['characters']] == [character.pk]
+    assert p.get(f'{root}{second.pk}/').status_code == 403
+    assert post(p, f'{root}{second.pk}/roll/', {'kind':'skill','key':'arcana'}).status_code == 403
+    assert post(p, f'{root}{second.pk}/resources/', {'action':'damage','amount':5}).status_code == 403
+    spell = CharacterAbility.objects.create(character=second, name='Attack', kind='attack')
+    assert post(p, f'{root}{second.pk}/abilities/{spell.pk}/use/', {}).status_code == 403
+    master_token = post(client(dm), scoped('/api/integrations/dmhub/sheet-access/', campaign),
+                        {'action':'rotate'}).json()['data']['token']
+    master = APIClient(HTTP_AUTHORIZATION='Bearer ' + master_token)
+    assert {x['id'] for x in master.get(root).json()['data']['characters']} == {character.pk, second.pk}

@@ -76,6 +76,19 @@ class DMHubBridge(Timestamped):
     enabled = models.BooleanField(default=True)
 
 
+class DMHubSheetAccess(Timestamped):
+    """One revocable device credential per member and campaign."""
+    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    token_hash = models.CharField(max_length=64, unique=True)
+    enabled = models.BooleanField(default=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["campaign", "user"], name="one_dmhub_sheet_access")
+        ]
+
+
 class CharacterFolder(Timestamped):
     campaign = models.ForeignKey(Campaign, on_delete=models.PROTECT, related_name='character_folders')
     owner = models.ForeignKey(User, on_delete=models.PROTECT)

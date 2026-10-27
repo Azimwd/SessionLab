@@ -11,6 +11,7 @@ from lab.api.sheets import SheetView, SheetResource, AbilitiesView, AbilityDetai
 from lab.api.room import RoomView, RoomEvents, RoomTableVisibility, InitiativeView, room_stream
 from lab.api.avatars import ProfileAvatar, CharacterAvatar
 from lab.api.dmhub import BridgeSettings, bridge_events
+from lab.api.dmhub_sheets import SheetAccessSettings, SheetBridge, SheetBridgeDetail, SheetBridgeRoll, SheetBridgeUse, SheetBridgeResource
 
 router = DefaultRouter()
 for prefix, view, base in [
@@ -28,6 +29,12 @@ for prefix, view, base in [
 urlpatterns = [
     path("api/dm/integrations/dmhub/", BridgeSettings.as_view()),
     path("api/integrations/dmhub/events/", bridge_events),
+    path("api/integrations/dmhub/sheet-access/", SheetAccessSettings.as_view()),
+    path("api/integrations/dmhub/sheets/", SheetBridge.as_view()),
+    path("api/integrations/dmhub/sheets/<int:pk>/", SheetBridgeDetail.as_view()),
+    path("api/integrations/dmhub/sheets/<int:pk>/roll/", SheetBridgeRoll.as_view()),
+    path("api/integrations/dmhub/sheets/<int:pk>/resources/", SheetBridgeResource.as_view()),
+    path("api/integrations/dmhub/sheets/<int:pk>/abilities/<int:ability_pk>/use/", SheetBridgeUse.as_view()),
     path("api/auth/me/avatar/", ProfileAvatar.as_view()),
     path("api/characters/<int:pk>/avatar/", CharacterAvatar.as_view()),
     path("api/room/", RoomView.as_view()),
