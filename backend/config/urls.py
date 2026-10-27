@@ -14,6 +14,7 @@ from lab.api.dmhub import BridgeSettings, bridge_events
 from lab.api.dmhub_sheets import SheetAccessSettings, SheetBridge, SheetBridgeDetail, SheetBridgeRoll, SheetBridgeUse, SheetBridgeResource
 from lab.api.dmhub_edit import SheetBridgeEdit, SheetBridgeConditions, SheetBridgeActions, SheetBridgeActionEdit, SheetBridgeCatalog, SheetBridgeCatalogAdd
 from lab.api.dmhub_dice import NativeDice, NativeDiceEvents
+from lab.api.dmhub_room import NativeRoom, NativeRoomCommand
 
 router = DefaultRouter()
 for prefix, view, base in [
@@ -31,6 +32,8 @@ for prefix, view, base in [
 urlpatterns = [
     path("api/dm/integrations/dmhub/", BridgeSettings.as_view()),
     path("api/integrations/dmhub/events/", bridge_events),
+    path("api/integrations/dmhub/room/", NativeRoom.as_view()),
+    path("api/integrations/dmhub/room/commands/", NativeRoomCommand.as_view()),
     path("api/integrations/dmhub/dice/", NativeDice.as_view()),
     path("api/integrations/dmhub/dice/events/", NativeDiceEvents.as_view()),
     path("api/integrations/dmhub/sheet-access/", SheetAccessSettings.as_view()),
