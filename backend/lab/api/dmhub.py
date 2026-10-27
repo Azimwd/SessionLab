@@ -120,7 +120,7 @@ def _line(event):
         summary = f"Ячейка {p['slot_level']} · {summary}".rstrip(" ·")
     return {
         "id": event.pk, "session": event.session_id, "text": text[:900],
-        "actor": who, "title": label, "kind": event.kind,
+        "actor": who, "title": label, "kind": event.kind, "visibility": event.visibility,
         "summary": summary[:700], "display": display, "card": result_card(event),
     }
 

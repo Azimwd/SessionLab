@@ -37,6 +37,8 @@ def result_card(event):
             'components': _text(p.get('components'), 1000),
             'notice': _text(p.get('adjudication') or p.get('mechanics_note'), 2000),
             'timestamp': int(event.created_at.timestamp()) if event.created_at else None}
+    if event.visibility == 'dm':
+        card['tags'].append('Только мастеру')
     if p.get('kind') == 'spell' and p.get('slot_level') is not None:
         level = p['slot_level']
         card['tags'].append('Заговор' if level == 0 else f'Ячейка {level} ур.')

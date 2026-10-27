@@ -9,12 +9,12 @@ from rest_framework.views import APIView
 
 from lab.models import CharacterAbility, SpellCatalogEntry
 from lab.services.sheets import CONDITIONS, controlled_character, sheet_for
-from .dmhub_sheets import access_for, bridge_payload, response_for, sheet_changed
+from .dmhub_sheets import PersonalKeyAuthentication, access_for, bridge_payload, response_for, sheet_changed
 from .sheets import AbilitySerializer, SheetSerializer, require_version, spell_catalog_data
 
 
 class PersonalSheetAPI(APIView):
-    authentication_classes = []
+    authentication_classes = [PersonalKeyAuthentication]
     permission_classes = [AllowAny]
 
 

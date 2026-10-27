@@ -14,6 +14,15 @@ class SessionAuthScheme(OpenApiAuthenticationExtension):
         }
 
 
+class DMHubPersonalScheme(OpenApiAuthenticationExtension):
+    target_class = 'lab.api.dmhub_sheets.PersonalKeyAuthentication'
+    name = 'DMHubPersonalKey'
+
+    def get_security_definition(self, auto_schema):
+        return {'type': 'http', 'scheme': 'bearer',
+                'description': 'Personal DMHub sheet key. Campaign and permissions are bound to the key. Not the public chat-bridge key.'}
+
+
 def envelope_hook(result, generator, request, public):
     """Document the actual JSON envelope and campaign/idempotency headers."""
     for path, operations in result.get("paths", {}).items():
@@ -21,7 +30,8 @@ def envelope_hook(result, generator, request, public):
             if method not in ["get", "post", "patch", "delete", "put"]:
                 continue
             params = op.setdefault("parameters", [])
-            if not path.startswith(("/api/auth/", "/api/campaigns/")) and path not in [
+            token_auth = path.startswith('/api/integrations/dmhub/') and path != '/api/integrations/dmhub/sheet-access/'
+            if not token_auth and not path.startswith(("/api/auth/", "/api/campaigns/")) and path not in [
                 "/api/schema/",
                 "/api/docs/",
             ]:
@@ -35,15 +45,16 @@ def envelope_hook(result, generator, request, public):
                     }
                 )
             if method != "get":
-                params.append(
-                    {
-                        "in": "header",
-                        "name": "X-CSRFToken",
-                        "required": True,
-                        "schema": {"type": "string"},
-                        "description": "Masked token from GET /api/auth/csrf/.",
-                    }
-                )
+                if not token_auth:
+                    params.append(
+                        {
+                            "in": "header",
+                            "name": "X-CSRFToken",
+                            "required": True,
+                            "schema": {"type": "string"},
+                            "description": "Masked token from GET /api/auth/csrf/.",
+                        }
+                    )
                 if not path.startswith("/api/auth/") and path not in [
                     "/api/campaigns/",
                     "/api/campaigns/join/",

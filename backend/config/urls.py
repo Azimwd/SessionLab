@@ -13,6 +13,7 @@ from lab.api.avatars import ProfileAvatar, CharacterAvatar
 from lab.api.dmhub import BridgeSettings, bridge_events
 from lab.api.dmhub_sheets import SheetAccessSettings, SheetBridge, SheetBridgeDetail, SheetBridgeRoll, SheetBridgeUse, SheetBridgeResource
 from lab.api.dmhub_edit import SheetBridgeEdit, SheetBridgeConditions, SheetBridgeActions, SheetBridgeActionEdit, SheetBridgeCatalog, SheetBridgeCatalogAdd
+from lab.api.dmhub_dice import NativeDice, NativeDiceEvents
 
 router = DefaultRouter()
 for prefix, view, base in [
@@ -30,6 +31,8 @@ for prefix, view, base in [
 urlpatterns = [
     path("api/dm/integrations/dmhub/", BridgeSettings.as_view()),
     path("api/integrations/dmhub/events/", bridge_events),
+    path("api/integrations/dmhub/dice/", NativeDice.as_view()),
+    path("api/integrations/dmhub/dice/events/", NativeDiceEvents.as_view()),
     path("api/integrations/dmhub/sheet-access/", SheetAccessSettings.as_view()),
     path("api/integrations/dmhub/sheets/", SheetBridge.as_view()),
     path("api/integrations/dmhub/sheets/<int:pk>/", SheetBridgeDetail.as_view()),

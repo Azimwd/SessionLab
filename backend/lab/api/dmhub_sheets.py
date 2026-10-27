@@ -12,6 +12,7 @@ from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from rest_framework.exceptions import NotAuthenticated, PermissionDenied, ValidationError
+from rest_framework.authentication import BaseAuthentication
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -94,6 +95,8 @@ class SheetAccessSettings(APIView):
 
 
 def access_for(request):
+    if getattr(request, '_dmhub_sheet_access', None) is not None:
+        return request._dmhub_sheet_access
     scheme, _, token = request.headers.get('Authorization', '').partition(' ')
     if scheme.lower() != 'bearer' or not 32 <= len(token) <= 128 or not token.isascii():
         raise NotAuthenticated('Недействительный ключ листа')
@@ -108,6 +111,17 @@ def access_for(request):
     ).exists():
         raise PermissionDenied('Доступ к кампании закрыт')
     return access
+
+
+class PersonalKeyAuthentication(BaseAuthentication):
+    """Resolve the user before DRF's per-user throttle; never treat a key as anonymous."""
+    def authenticate(self, request):
+        access = access_for(request)
+        request._dmhub_sheet_access = access
+        return access.user, None
+
+    def authenticate_header(self, request):
+        return 'Bearer'
 
 
 def response_for(request, access, operation):
@@ -147,7 +161,7 @@ def response_for(request, access, operation):
 
 
 class SheetBridge(APIView):
-    authentication_classes = []
+    authentication_classes = [PersonalKeyAuthentication]
     permission_classes = [AllowAny]
 
     @extend_schema(responses=OpenApiTypes.OBJECT)
@@ -160,7 +174,8 @@ class SheetBridge(APIView):
         if not is_dm(access.campaign, access.user):
             folders = folders.filter(Q(is_system=True) | Q(owner=access.user) |
                                      Q(pk__in=chars.values('folder_id')))
-        return Response({'campaign': access.campaign.name,
+        return Response({'campaign': access.campaign.name, 'campaign_id': access.campaign_id,
+            'is_dm': is_dm(access.campaign, access.user),
             'folders': [{'id': f.pk, 'name': f.name, 'is_system': f.is_system}
                         for f in folders.order_by('-is_system', 'name', 'pk')],
             'characters': [
@@ -171,7 +186,7 @@ class SheetBridge(APIView):
 
 
 class SheetBridgeDetail(APIView):
-    authentication_classes = []
+    authentication_classes = [PersonalKeyAuthentication]
     permission_classes = [AllowAny]
 
     @extend_schema(responses=OpenApiTypes.OBJECT)
@@ -192,7 +207,7 @@ class SheetBridgeDetail(APIView):
 
 
 class SheetBridgeRoll(APIView):
-    authentication_classes = []
+    authentication_classes = [PersonalKeyAuthentication]
     permission_classes = [AllowAny]
 
     @extend_schema(request=OpenApiTypes.OBJECT, responses=OpenApiTypes.OBJECT)
@@ -208,7 +223,7 @@ class SheetBridgeRoll(APIView):
 
 
 class SheetBridgeUse(APIView):
-    authentication_classes = []
+    authentication_classes = [PersonalKeyAuthentication]
     permission_classes = [AllowAny]
 
     @extend_schema(request=OpenApiTypes.OBJECT, responses=OpenApiTypes.OBJECT)
@@ -226,7 +241,7 @@ class SheetBridgeUse(APIView):
 
 
 class SheetBridgeResource(APIView):
-    authentication_classes = []
+    authentication_classes = [PersonalKeyAuthentication]
     permission_classes = [AllowAny]
 
     @extend_schema(request=OpenApiTypes.OBJECT, responses=OpenApiTypes.OBJECT)
