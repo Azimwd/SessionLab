@@ -86,8 +86,16 @@ def _line(event):
         if not any(details) and p.get("description"):
             details = [clean(p["description"], 220)]
         text = f"{who}: {label}{level_text}" + (" — " + "; ".join(filter(None, details)) if any(details) else "")
-    # The bridge publishes a fixed rendering, never arbitrary HTML or hidden payload fields.
-    return {"id": event.pk, "session": event.session_id, "text": text[:900]}
+    # Structured presentation lets the DMHub mod create a titled message while
+    # retaining `text` for older bridge versions. Never expose the raw payload.
+    summary = text.split(" — ", 1)[1] if " — " in text else ""
+    if event.kind == "ability" and p.get("kind") == "spell" and p.get("slot_level"):
+        summary = f"Ячейка {p['slot_level']} · {summary}".rstrip(" ·")
+    return {
+        "id": event.pk, "session": event.session_id, "text": text[:900],
+        "actor": who, "title": label, "kind": event.kind,
+        "summary": summary[:700],
+    }
 
 
 @require_GET

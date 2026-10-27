@@ -41,6 +41,10 @@ def test_dmhub_bridge_only_public_scoped_saved_events(world):
     assert 'Огненный шар' in batch['events'][0]['text']
     assert 'СЛ 15' in batch['events'][0]['text']
     assert 'провал 29, успех 14' in batch['events'][0]['text']
+    assert batch['events'][0]['title'] == 'Огненный шар'
+    assert batch['events'][0]['actor'] == character.name
+    assert batch['events'][0]['summary'].startswith('Ячейка 4 · ')
+    assert batch['events'][1]['summary'] == '18 (1d20+3)'
     assert 'Секрет' not in str(batch)
     assert consumer.get(feed + '?cursor=' + str(batch['cursor'])).json()['data']['events'] == []
     assert consumer.get(feed + '?cursor=-1').status_code == 400
