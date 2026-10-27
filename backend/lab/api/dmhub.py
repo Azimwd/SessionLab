@@ -16,6 +16,7 @@ from rest_framework.views import APIView
 
 from lab.models import AuditLog, Campaign, DMHubBridge, RoomEvent
 from .common import campaign_for
+from .dmhub_cards import result_card
 
 
 def bridge_hash(token):
@@ -120,7 +121,7 @@ def _line(event):
     return {
         "id": event.pk, "session": event.session_id, "text": text[:900],
         "actor": who, "title": label, "kind": event.kind,
-        "summary": summary[:700], "display": display,
+        "summary": summary[:700], "display": display, "card": result_card(event),
     }
 
 

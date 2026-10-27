@@ -85,6 +85,46 @@ def test_lua_chat_message_is_code_safe():
     assert 'bad' not in code
 
 
+def test_native_result_cards_use_public_saved_breakdowns(world):
+    from lab.api.dmhub import _line
+    _, player, _, campaign, character, session = world
+    saved = event(campaign, session, player, character, 'ability', {
+        'label': 'Луч холода', 'kind': 'spell', 'slot_level': 0,
+        'spell_attack_bonus': 2, 'spell_save_dc': 10, 'damage_type': 'холод',
+        'description': 'Первая строка.\nВторая строка.', 'components': 'В, С',
+        'roll': {'formula': '1d20+2', 'values': [1], 'chosen': 1, 'modifier': 2, 'total': 3},
+        'damage': {'formula': '1d8', 'total': 5, 'terms': [{'sides': 8, 'values': [5], 'sign': 1}]},
+        'private_secret': 'never-export-this',
+    })
+    result = _line(saved)
+    card = result['card']
+    assert card['rows'] == [
+        {'label': '1d20+2', 'value': 3, 'detail': '[1] · +2', 'tone': 'roll'},
+        {'label': 'холод', 'value': 5, 'detail': '1d8: [5]', 'tone': 'damage'},
+    ]
+    assert card['tags'] == ['Заговор', 'Атака +2', 'СЛ 10']
+    assert card['description'] == 'Первая строка.\nВторая строка.' and card['components'] == 'В, С'
+    assert card['timestamp'] == int(saved.created_at.timestamp())
+    assert 'private_secret' not in str(result) and 'never-export-this' not in str(result)
+    fire = event(campaign, session, player, character, 'ability', {
+        'label': 'Огненный шар', 'kind': 'spell', 'slot_level': 4, 'damage_type': 'огонь',
+        'damage': {'total': 27, 'formula': '8d6'}, 'upcast': [{'formula': '1d6', 'total': 2}],
+        'save': {'ability': 'dex', 'dc': 10, 'failed_damage': 27, 'success_damage': 13},
+    })
+    fire_card = _line(fire)['card']
+    assert fire_card['rows'][0]['value'] == 27
+    assert fire_card['saves'] == [{'ability': 'Ловкость', 'dc': 10, 'part': None, 'failed': 27, 'passed': 13}]
+    assert 'усиление: 1d6' in fire_card['rows'][0]['detail']
+    assert fire_card['tags'] == ['Ячейка 4 ур.']
+    multi = event(campaign, session, player, character, 'ability', {
+        'label': 'Лучи', 'kind': 'spell', 'parts': [
+            {'roll': {'total': 19}, 'damage': {'total': 7}},
+            {'roll': {'total': 12}, 'damage': {'total': 4}},
+        ], 'total_damage': 11,
+    })
+    assert [r['value'] for r in _line(multi)['card']['rows']] == [19, 7, 12, 4, 11]
+
+
 def test_sheet_bridge_bound_to_member_and_idempotent(world):
     dm, player, outsider, campaign, character, session = world
     settings = scoped('/api/integrations/dmhub/sheet-access/', campaign)
