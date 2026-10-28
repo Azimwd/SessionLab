@@ -87,20 +87,19 @@ it('history navigates server pages and provides a bounded keyboard-scrollable re
  fireEvent.click(screen.getByRole('button',{name:'К последним'}));
  expect(screen.getByText('Страница 1')).toBeInTheDocument();
 });
-it('selects all attack rolls, picks a target once and applies independent hit outcomes in one request',()=>{
+it('selects all attack rolls, picks a target once and applies selected hits in one request without hit/miss prompts',()=>{
  render(<TargetDamage event={{id:92,kind:'ability',payload:{damage_type:'fire',parts:[{damage:{total:10},roll:{total:20}},{damage:{total:7},roll:{total:17}},{damage:{total:6},roll:{total:12}}]}}}/>);
  fireEvent.click(screen.getByText('Применить к цели'));
  fireEvent.click(screen.getByText('Выбрать все'));
  fireEvent.click(screen.getByLabelText('Стражник № 1'));
- expect(screen.getByText('Нанести урон (3 броска, целей: 1)')).toBeDisabled();
- fireEvent.click(screen.getByText('Все выбранные атаки попали'));
- fireEvent.change(screen.getByLabelText('Попадание · бросок 3: Стражник № 1'),{target:{value:'miss'}});
+ expect(screen.getByText('Нанести урон (3 броска, целей: 1)')).toBeEnabled();
+ expect(screen.queryByLabelText('Попадание · бросок 3: Стражник № 1')).not.toBeInTheDocument();
  fireEvent.click(screen.getByText('Нанести урон (3 броска, целей: 1)'));
  expect(mocks.mutate).toHaveBeenCalledTimes(1);
  expect(mocks.mutate.mock.calls[0][0].body).toEqual({source_event:92,parts:[
   {part_index:0,targets:[1],outcomes:{'1':{hit:true}}},
   {part_index:1,targets:[1],outcomes:{'1':{hit:true}}},
-  {part_index:2,targets:[1],outcomes:{'1':{hit:false}}}
+  {part_index:2,targets:[1],outcomes:{'1':{hit:true}}}
  ]});
 });
 it('allows deselecting all parts without applying anything',()=>{
