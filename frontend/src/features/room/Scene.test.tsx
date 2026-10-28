@@ -15,12 +15,14 @@ it('players see identities without HP or management, even if a cached object con
  expect(screen.queryByText('Настроить')).not.toBeInTheDocument();
  expect(screen.queryByText('Добавить из листа')).not.toBeInTheDocument();
 });
-it('submits multiple save targets without client-supplied damage or save outcome',()=>{
+it('applies independent save outcomes immediately without a master review',()=>{
  render(<TargetDamage event={{id:7,kind:'ability',payload:{damage_type:'fire',damage:{total:21},save:{ability:'dex',dc:15}}}}/>);
  fireEvent.click(screen.getByText('Применить к цели'));
  fireEvent.click(screen.getByLabelText('Стражник № 1'));fireEvent.click(screen.getByLabelText('Стражник № 2'));
- fireEvent.click(screen.getByText('Отправить мастеру (2)'));
- expect(mocks.mutate.mock.calls[0][0].body).toEqual({source_event:7,part_index:0,targets:[1,2]});
+ fireEvent.change(screen.getByLabelText('Спасбросок: Стражник № 1'),{target:{value:'failure'}});
+ fireEvent.change(screen.getByLabelText('Спасбросок: Стражник № 2'),{target:{value:'success'}});
+ fireEvent.click(screen.getByText('Нанести урон (2)'));
+ expect(mocks.mutate.mock.calls[0][0].body).toEqual({source_event:7,part_index:0,targets:[1,2],outcomes:{'1':{save_outcome:'failure'},'2':{save_outcome:'success'}}});
  expect(screen.queryByText('19/40')).not.toBeInTheDocument();
 });
 it('an attack selects one target at a time',()=>{
@@ -46,4 +48,20 @@ it('per-spell advantage is sent to the cast callback before rolling',()=>{
  fireEvent.change(screen.getByLabelText('Режим атаки Луч'),{target:{value:'advantage'}});
  fireEvent.click(screen.getByText('Применить'));
  expect(onUse).toHaveBeenCalledWith(spell,0,false,'advantage');
+});
+
+it('master has no review button or pending approval section',()=>{
+ mocks.master=true;mocks.requests=[{id:9,label:'Огонь',target_name:'Стражник № 1',requester_name:'Игрок',status:'applied'}];
+ render(<Scene characters={[]}/>);
+ expect(screen.queryByText('Рассмотреть')).not.toBeInTheDocument();
+ expect(screen.queryByText('Ожидают применения')).not.toBeInTheDocument();
+ expect(screen.getByText('Последние применения урона')).toBeInTheDocument();
+});
+it('requires a save outcome before applying and exposes no resistance control',()=>{
+ render(<TargetDamage event={{id:7,kind:'ability',payload:{damage_type:'fire',damage:{total:21},save:{ability:'dex',dc:15}}}}/>);
+ fireEvent.click(screen.getByText('Применить к цели'));fireEvent.click(screen.getByLabelText('Стражник № 1'));
+ expect(screen.getByText('Нанести урон (1)')).toBeDisabled();
+ expect(screen.queryByLabelText('Защита от этого урона')).not.toBeInTheDocument();
+ fireEvent.change(screen.getByLabelText('Спасбросок: Стражник № 1'),{target:{value:'failure'}});
+ expect(screen.getByText('Нанести урон (1)')).not.toBeDisabled();
 });

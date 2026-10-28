@@ -1,4 +1,4 @@
-"""Scene combatants and DM-approved damage from immutable server roll snapshots."""
+"""Scene combatants and player-resolved damage from immutable server roll snapshots."""
 from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import ValidationError, PermissionDenied
 from rest_framework.response import Response
@@ -177,6 +177,75 @@ class SceneTargetDetail(APIView):
         return mutate(request, c.id, op, dm=True)
 
 
+def apply_damage(row, campaign, user, data, privileged=False):
+    """One atomic application. Callers hold the campaign lock via mutate()."""
+    if row.status != 'pending':
+        raise ValidationError('Этот урон уже применён или отменён')
+    t = row.target
+    if not t.active:
+        raise ValidationError('Цель удалена из сцены')
+    if not is_dm(campaign, user) and (not t.visible or not t.targetable):
+        raise PermissionDenied('Цель недоступна')
+    if not isinstance(data, dict):
+        raise ValidationError('Исход цели должен быть объектом')
+    if not privileged and set(data) - {'save_outcome', 'hit'}:
+        raise ValidationError('Игрок выбирает только попадание и исход спасброска. Защита задаётся мастером.')
+    part = part_for(row.source_event, row.part_index)
+    amount = part['damage']['total']
+    save_roll = None
+    outcome = None
+    if 'save' in part:
+        outcome = data.get('save_outcome')
+        if outcome == 'roll' and privileged:
+            from lab.services.sheets import computed
+            save_roll = d20(computed(target_sheet(t))['saves'][part['save']['ability']], data.get('save_mode', 'normal'))
+            outcome = 'success' if save_roll['total'] >= part['save']['dc'] else 'failure'
+        if outcome not in ('success', 'failure'):
+            raise ValidationError(f'{t.name}: укажите, прошла ли цель спасбросок')
+        if outcome == 'success':
+            if 'success_damage' not in part['save'] and not (privileged and 'base_damage' in data):
+                raise ValidationError('Урон при успешном спасброске не определён. Мастер должен уточнить действие.')
+            amount = part['save'].get('success_damage', 0)
+        else:
+            amount = part['save'].get('failed_damage', amount)
+    if 'roll' in part:
+        if type(data.get('hit')) is not bool:
+            raise ValidationError(f'{t.name}: укажите попадание или промах')
+        if not data['hit']:
+            amount = 0
+    if privileged and 'base_damage' in data:
+        amount = integer(data['base_damage'], 'Урон по решению мастера')
+    amount = max(0, amount)
+    damage_type = damage_key(row.source_event.payload.get('damage_type'))
+    defense = data.get('defense', 'auto') if privileged else 'auto'
+    if defense == 'auto':
+        defense = t.defenses.get(damage_type, t.defenses.get('all', 'normal'))
+    if not isinstance(defense, str) or defense not in DEFENSES:
+        raise ValidationError('Неизвестная защита от урона')
+    final = 0 if defense == 'immunity' else amount//2 if defense == 'resistance' else amount*2 if defense == 'vulnerability' else amount
+    before, _, temporary = hp(t)
+    absorbed = min(temporary, final)
+    after = max(0, before-(final-absorbed))
+    if t.linked_sheet:
+        sh = target_sheet(t)
+        sh.hp_current, sh.hp_temp = after, temporary-absorbed
+        sh.version += 1
+        sh.save()
+    else:
+        t.hp_current, t.hp_temp = after, temporary-absorbed
+    t.version += 1
+    t.save()
+    row.status = 'applied'
+    row.resolution = {'base_damage': amount, 'defense': defense, 'final_damage': final,
+                      'hp_before': before, 'hp_after': after, 'temp_absorbed': absorbed,
+                      'save_outcome': outcome, 'save_roll': save_roll, 'hit': data.get('hit')}
+    row.resolved_by = user
+    row.save()
+    event(campaign, active_session(campaign), user, None, 'damage', {'label': 'Урон применён',
+          'target_name': t.name, 'source_event': row.source_event_id},
+          row.source_event.visibility if t.visible else 'dm')
+
+
 class DamageRequests(APIView):
     def get(self, request):
         c = campaign_for(request)
@@ -185,8 +254,9 @@ class DamageRequests(APIView):
         rows = DamageApplication.objects.filter(target__session=s).select_related('target__source__sheet', 'source_event', 'requester').order_by('-id')
         if not dm:
             rows = rows.filter(requester=request.user, target__visible=True)
-        if request.query_params.get('status') == 'pending':
-            rows = rows.filter(status='pending')
+        status = request.query_params.get('status')
+        if status in ('pending', 'applied', 'rejected'):
+            rows = rows.filter(status=status)
         return Response([application_data(r, dm) for r in rows[:100]])
 
     def post(self, request):
@@ -194,104 +264,75 @@ class DamageRequests(APIView):
         def op(c):
             s = active_session(c)
             dm = is_dm(c, request.user)
+            if set(request.data) - {'source_event', 'part_index', 'targets', 'outcomes'}:
+                raise ValidationError('Урон и защита определяются сервером, не клиентом')
             source = get_object_or_404(RoomEvent, pk=integer(request.data.get('source_event'), 'Результат броска', 1, 9223372036854775807), campaign=c, session=s, kind='ability')
             if not dm and source.actor_id != request.user.id:
                 raise PermissionDenied('Можно применять только свой результат броска')
             index = request.data.get('part_index', 0)
             part = part_for(source, index)
             ids = request.data.get('targets')
-            if not isinstance(ids, list) or not 1<=len(ids)<=50 or any(type(i) is not int for i in ids) or len(set(ids))!=len(ids):
+            if not isinstance(ids, list) or not 1 <= len(ids) <= 50 or any(type(i) is not int for i in ids) or len(set(ids)) != len(ids):
                 raise ValidationError('Выберите от 1 до 50 разных целей')
+            outcomes = request.data.get('outcomes', {})
+            if not isinstance(outcomes, dict) or set(outcomes) - {str(i) for i in ids}:
+                raise ValidationError('Исходы должны соответствовать выбранным целям')
             attack = 'roll' in part
-            if attack and len(ids)!=1:
+            if attack and len(ids) != 1:
                 raise ValidationError('Каждому броску атаки назначается одна цель')
-            if attack and DamageApplication.objects.filter(source_event=source, part_index=index, status__in=['pending','applied']).exists():
-                raise ValidationError('Этот бросок атаки уже назначен цели')
-            targets = SceneTarget.objects.filter(id__in=ids, session=s, active=True)
+            previous = DamageApplication.objects.filter(source_event=source, part_index=index)
+            if previous.filter(status='applied', **({} if attack else {'target_id__in': ids})).exists():
+                raise ValidationError('Этот результат уже применён')
+            targets = SceneTarget.objects.filter(id__in=ids, session=s, active=True).select_related('source__sheet')
             if not dm:
                 targets = targets.filter(visible=True, targetable=True)
-            if targets.count()!=len(ids):
+            if targets.count() != len(ids):
                 raise ValidationError('Одна из целей недоступна')
-            if DamageApplication.objects.filter(source_event=source, part_index=index, target_id__in=ids, status__in=['pending','applied']).exists():
-                raise ValidationError('Для этой цели урон уже запрошен или применён')
-            return [application_data(DamageApplication.objects.create(target=t, source_event=source, requester=request.user,
-                    part_index=index, is_attack=attack), dm) for t in targets]
+            # Old pending requests no longer require a master review. The author can
+            # apply them here; an old attack reservation can also be reassigned.
+            if attack:
+                previous.filter(status='pending').exclude(target_id__in=ids).update(status='rejected', resolved_by=request.user)
+            result = []
+            for t in targets.order_by('id'):
+                row = previous.filter(target=t, status='pending').first()
+                if row is None:
+                    row = DamageApplication.objects.create(target=t, source_event=source, requester=request.user,
+                                                           part_index=index, is_attack=attack)
+                else:
+                    row.requester = request.user
+                    row.target = t
+                apply_damage(row, c, request.user, outcomes.get(str(t.id), {}))
+                result.append(application_data(row, dm))
+            return result
         return mutate(request, c.id, op)
 
 
 class ResolveDamage(APIView):
+    """Compatibility for already-created pending requests; not a review queue."""
     def post(self, request, pk):
-        c = campaign_for(request, dm=True)
+        c = campaign_for(request)
         def op(c):
             s = active_session(c)
-            row = get_object_or_404(DamageApplication.objects.select_for_update().select_related('target__source__sheet', 'source_event', 'requester'),
+            # PostgreSQL must lock ONLY the application, not the nullable sheet
+            # joined for presentation. Locking the outer join raised HTTP 500.
+            row = get_object_or_404(DamageApplication.objects.select_for_update(of=('self',)).select_related('target__source__sheet', 'source_event', 'requester'),
                                      pk=pk, target__session=s, source_event__campaign=c)
+            dm = is_dm(c, request.user)
+            if not dm and (row.source_event.actor_id != request.user.id or row.requester_id != request.user.id):
+                raise PermissionDenied('Можно применить только свой результат')
             if row.status != 'pending':
-                raise ValidationError('Запрос уже обработан')
-            data = request.data
-            if data.get('action') == 'reject':
-                row.status='rejected'
+                raise ValidationError('Этот результат уже обработан')
+            action = request.data.get('action')
+            if action == 'reject':
+                if not dm:
+                    raise PermissionDenied('Отменить старый запрос может только мастер')
+                row.status = 'rejected'
+                row.resolved_by = request.user
+                row.save()
+            elif action == 'apply':
+                payload = {k: v for k, v in request.data.items() if k != 'action'}
+                apply_damage(row, c, request.user, payload, privileged=dm)
             else:
-                if data.get('action') != 'apply':
-                    raise ValidationError('Выберите apply или reject')
-                t = row.target
-                if not t.active:
-                    raise ValidationError('Цель удалена из сцены')
-                part = part_for(row.source_event, row.part_index)
-                amount = part['damage']['total']
-                save_roll = None
-                if 'save' in part:
-                    outcome = data.get('save_outcome')
-                    if outcome == 'roll':
-                        from lab.services.sheets import computed
-                        ability = part['save']['ability']
-                        save_roll = d20(computed(target_sheet(t))['saves'][ability], data.get('save_mode', 'normal'))
-                        outcome = 'success' if save_roll['total'] >= part['save']['dc'] else 'failure'
-                    if outcome not in ('success', 'failure'):
-                        raise ValidationError('Укажите результат спасброска для цели')
-                    if outcome == 'success':
-                        if 'success_damage' not in part['save']:
-                            raise ValidationError('Для этого действия успешный урон не определён. Укажите его вручную.')
-                        amount = part['save']['success_damage']
-                    else:
-                        amount = part['save'].get('failed_damage', amount)
-                else:
-                    outcome = None
-                if 'roll' in part:
-                    if type(data.get('hit')) is not bool:
-                        raise ValidationError('Подтвердите попадание или промах')
-                    if not data['hit']:
-                        amount=0
-                if 'base_damage' in data:
-                    amount = integer(data['base_damage'], 'Урон по решению мастера')
-                amount = max(0, amount)
-                damage_type = damage_key(row.source_event.payload.get('damage_type'))
-                defense = data.get('defense', 'auto')
-                if defense == 'auto':
-                    defense = t.defenses.get(damage_type, t.defenses.get('all', 'normal'))
-                if not isinstance(defense, str) or defense not in DEFENSES:
-                    raise ValidationError('Неизвестная защита от урона')
-                final = 0 if defense=='immunity' else amount//2 if defense=='resistance' else amount*2 if defense=='vulnerability' else amount
-                before, maximum, temporary = hp(t)
-                absorbed = min(temporary, final)
-                after = max(0, before - (final-absorbed))
-                if t.linked_sheet:
-                    sh = target_sheet(t)
-                    sh.hp_current, sh.hp_temp = after, temporary-absorbed
-                    sh.version += 1
-                    sh.save()
-                else:
-                    t.hp_current, t.hp_temp = after, temporary-absorbed
-                t.version += 1
-                t.save()
-                row.status = 'applied'
-                row.resolution = {'base_damage': amount, 'defense': defense, 'final_damage': final,
-                                  'hp_before': before, 'hp_after': after, 'temp_absorbed': absorbed,
-                                  'save_outcome': outcome, 'save_roll': save_roll, 'hit': data.get('hit')}
-                # Source visibility is retained. Never broadcast health or secret defenses.
-                event(c, s, request.user, None, 'damage', {'label': 'Урон применён', 'target_name': t.name,
-                       'source_event': row.source_event_id}, row.source_event.visibility if t.visible else 'dm')
-            row.resolved_by=request.user
-            row.save()
-            return application_data(row, True)
-        return mutate(request, c.id, op, dm=True)
+                raise ValidationError('Выберите apply или reject')
+            return application_data(row, dm)
+        return mutate(request, c.id, op)

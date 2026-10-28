@@ -4306,3 +4306,5 @@ blockquote {
 .scene-chooser-body { padding:12px 0; }
 .scene-requests>div { display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0;border-bottom:1px solid var(--border,#303642); }
 .scene-requests small { display:block;margin-top:4px;opacity:.65; }
+.scene-target-outcome { padding:12px;border:1px solid var(--border,#303642);border-radius:12px;margin:8px 0; }
+.scene-target-outcome>strong { display:block;margin-bottom:8px; }
