@@ -9,7 +9,7 @@ from .common import is_dm
 from .dmhub_edit import PersonalSheetAPI
 from .dmhub_sheets import access_for, bridge_payload, response_for
 from .scene import (DAMAGE_TYPES, target_data, part_for, application_data,
-                    create_targets, update_target, submit_damage, integer)
+                    create_targets, update_target, submit_damage, integer, effect_kind)
 
 
 class NativeScene(PersonalSheetAPI):
@@ -45,7 +45,7 @@ class NativeScene(PersonalSheetAPI):
                     parts.append(item)
                 if parts:
                     sources.append({'id': e.id, 'label': e.payload.get('label', 'Действие'),
-                                    'damage_type': e.payload.get('damage_type', ''), 'parts': parts})
+                                    'damage_type': e.payload.get('damage_type', ''), 'effect': effect_kind(e), 'parts': parts})
             history = DamageApplication.objects.filter(target__session=session, status='applied').select_related(
                 'target__source__sheet', 'source_event', 'requester').order_by('-id')
             if not dm:

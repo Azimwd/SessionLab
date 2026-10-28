@@ -65,6 +65,10 @@ def target_data(t, dm=False):
     return result
 
 
+def effect_kind(source):
+    return 'healing' if str(source.payload.get('damage_type', '')).strip().casefold() in ('healing', 'heal', 'лечение', 'исцеление') else 'damage'
+
+
 def part_for(source, index):
     parts = source.payload.get('parts') or [source.payload]
     integer(index, 'Часть броска', 0, len(parts)-1)
@@ -72,8 +76,6 @@ def part_for(source, index):
     damage = part.get('damage')
     if not isinstance(damage, dict) or type(damage.get('total')) is not int or damage['total'] < 0:
         raise ValidationError('В этой части результата нет применимого урона')
-    if str(source.payload.get('damage_type', '')).lower() in ('healing', 'лечение'):
-        raise ValidationError('Это лечение, а не урон')
     return part
 
 
@@ -81,11 +83,11 @@ def application_data(row, dm=False):
     result = {'id': row.id, 'target': row.target_id, 'target_name': row.target.name,
               'source_event': row.source_event_id, 'label': row.source_event.payload.get('label', ''),
               'requester_name': row.requester.first_name or row.requester.email,
-              'part_index': row.part_index, 'status': row.status}
+              'part_index': row.part_index, 'status': row.status, 'effect': effect_kind(row.source_event)}
     if dm:
         part = part_for(row.source_event, row.part_index)
         key = damage_key(row.source_event.payload.get('damage_type'))
-        result.update(effective_defense=row.target.defenses.get(key, row.target.defenses.get('all', 'normal')),
+        result.update(effective_defense=None if effect_kind(row.source_event)=='healing' else row.target.defenses.get(key, row.target.defenses.get('all', 'normal')),
                       recognized_damage_type=key in DAMAGE_TYPES, part=part, damage_type=row.source_event.payload.get('damage_type', ''),
                       target_detail=target_data(row.target, True), resolution=row.resolution)
     return result
@@ -181,6 +183,32 @@ class SceneTargetDetail(APIView):
         return mutate(request, c.id, lambda c: update_target(c, request.user, pk, request.data), dm=True)
 
 
+def apply_healing(row, campaign, user, amount):
+    """Healing ignores damage defenses and temporary HP; saved roll is authoritative."""
+    t = row.target
+    before, maximum, temporary = hp(t)
+    after = min(maximum, before + amount)
+    if t.linked_sheet:
+        sh = target_sheet(t)
+        sh.hp_current = after
+        if before == 0 and after > 0:
+            sh.death_successes = sh.death_failures = 0
+        sh.version += 1
+        sh.save()
+    else:
+        t.hp_current = after
+    t.version += 1
+    t.save()
+    row.status = 'applied'
+    row.resolution = {'effect': 'healing', 'base_healing': amount, 'final_healing': after-before,
+                      'hp_before': before, 'hp_after': after, 'hp_temp': temporary}
+    row.resolved_by = user
+    row.save()
+    event(campaign, active_session(campaign), user, None, 'healing', {'label': 'Лечение применено',
+          'target_name': t.name, 'source_event': row.source_event_id},
+          row.source_event.visibility if t.visible else 'dm')
+
+
 def apply_damage(row, campaign, user, data, privileged=False):
     """One atomic application. Callers hold the campaign lock via mutate()."""
     if row.status != 'pending':
@@ -196,6 +224,11 @@ def apply_damage(row, campaign, user, data, privileged=False):
         raise ValidationError('Игрок выбирает только попадание и исход спасброска. Защита задаётся мастером.')
     part = part_for(row.source_event, row.part_index)
     amount = part['damage']['total']
+    if effect_kind(row.source_event) == 'healing':
+        if data:
+            raise ValidationError('Для лечения не нужны попадание, спасбросок или изменение защиты')
+        apply_healing(row, campaign, user, amount)
+        return
     save_roll = None
     outcome = None
     if 'save' in part:
@@ -266,7 +299,7 @@ def submit_damage(c, user, data):
     outcomes = data.get('outcomes', {})
     if not isinstance(outcomes, dict) or set(outcomes) - {str(i) for i in ids}:
         raise ValidationError('Исходы должны соответствовать выбранным целям')
-    attack = 'roll' in part
+    attack = effect_kind(source) == 'damage' and 'roll' in part
     if attack and len(ids) != 1:
         raise ValidationError('Каждому броску атаки назначается одна цель')
     previous = DamageApplication.objects.filter(source_event=source, part_index=index)

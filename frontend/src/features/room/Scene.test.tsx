@@ -55,7 +55,7 @@ it('master has no review button or pending approval section',()=>{
  render(<Scene characters={[]}/>);
  expect(screen.queryByText('Рассмотреть')).not.toBeInTheDocument();
  expect(screen.queryByText('Ожидают применения')).not.toBeInTheDocument();
- expect(screen.getByText('Последние применения урона')).toBeInTheDocument();
+ expect(screen.getByText('Последние применения урона и лечения')).toBeInTheDocument();
 });
 it('requires a save outcome before applying and exposes no resistance control',()=>{
  render(<TargetDamage event={{id:7,kind:'ability',payload:{damage_type:'fire',damage:{total:21},save:{ability:'dex',dc:15}}}}/>);
@@ -64,4 +64,14 @@ it('requires a save outcome before applying and exposes no resistance control',(
  expect(screen.queryByLabelText('Защита от этого урона')).not.toBeInTheDocument();
  fireEvent.change(screen.getByLabelText('Спасбросок: Стражник № 1'),{target:{value:'failure'}});
  expect(screen.getByText('Нанести урон (1)')).not.toBeDisabled();
+});
+it('healing chooses targets without attack or save prompts and cannot alter the roll',()=>{
+ render(<TargetDamage event={{id:91,kind:'ability',payload:{damage_type:'лечение',damage:{total:7}}}}/>);
+ fireEvent.click(screen.getByText('Применить к цели'));
+ fireEvent.click(screen.getByLabelText('Стражник № 1'));
+ expect(screen.queryByText('Нанести урон (1)')).not.toBeInTheDocument();
+ expect(screen.queryByLabelText('Попадание: Стражник № 1')).not.toBeInTheDocument();
+ fireEvent.click(screen.getByText('Вылечить (1)'));
+ expect(mocks.mutate.mock.calls[0][0].body).toEqual({source_event:91,part_index:0,targets:[1],outcomes:{'1':{}}});
+ expect(screen.queryByText('19/40')).not.toBeInTheDocument();
 });
