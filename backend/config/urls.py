@@ -1,3 +1,4 @@
+from lab.api.dmhub_scene import NativeScene, NativeSceneCommand
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
@@ -31,6 +32,8 @@ for prefix, view, base in [
 ]:
     router.register(prefix, view, basename=base)
 urlpatterns = [
+    path("api/integrations/dmhub/scene/", NativeScene.as_view()),
+    path("api/integrations/dmhub/scene/commands/", NativeSceneCommand.as_view()),
     path("api/dm/integrations/dmhub/", BridgeSettings.as_view()),
     path("api/integrations/dmhub/events/", bridge_events),
     path("api/integrations/dmhub/room/", NativeRoom.as_view()),
