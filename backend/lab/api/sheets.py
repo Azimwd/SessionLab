@@ -188,6 +188,7 @@ class AbilityUpdateRequest(AbilitySerializer):
 
 
 class EventSerializer(serializers.ModelSerializer):
+    payload = serializers.SerializerMethodField()
     actor_name = serializers.SerializerMethodField()
 
     class Meta:
@@ -201,7 +202,21 @@ class EventSerializer(serializers.ModelSerializer):
             "payload",
             "created_at",
             "actor_name",
+            "actor",
         ]
+
+    def get_payload(self, obj) -> dict:
+        user = self.context.get('user')
+        hide = self.context.get('hide_health') and obj.character_id and (obj.character.owner_id != getattr(user, 'id', None) or obj.character.kind == 'npc')
+        if not hide:
+            return obj.payload
+        def redact(value):
+            if isinstance(value, dict):
+                return {k: redact(v) for k, v in value.items() if k not in {'hp_current', 'hp_max', 'hp_temp', 'hp_before', 'hp_after'}}
+            if isinstance(value, list):
+                return [redact(v) for v in value]
+            return value
+        return redact(obj.payload)
 
     def get_actor_name(self, obj) -> str:
         return obj.actor.first_name or "Участник"

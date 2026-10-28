@@ -232,7 +232,7 @@ def test_sheet_permissions_party_and_version(world):
         b"secret note" not in public.content
         and b"private inventory" not in public.content
     )
-    assert public.json()["data"]["party"][0]["hp_current"] == 10
+    assert "hp_current" not in public.json()["data"]["party"][0]
     r = patch_api(
         client(p),
         url,

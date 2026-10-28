@@ -7,6 +7,7 @@ from lab.api.campaigns import *
 from lab.api.play import *
 from lab.api.dm import *
 from lab.api.health import health
+from lab.api.scene import SceneTargets, SceneTargetDetail, DamageRequests, ResolveDamage
 from lab.api.sheets import SheetView, SheetResource, AbilitiesView, AbilityDetail, RollView, AbilityUse, SpellCatalogView, SpellCatalogDetail, AddCatalogSpell
 from lab.api.room import RoomView, RoomEvents, RoomTableVisibility, InitiativeView, room_stream
 from lab.api.avatars import ProfileAvatar, CharacterAvatar
@@ -50,6 +51,10 @@ urlpatterns = [
     path("api/integrations/dmhub/sheets/<int:pk>/abilities/<int:ability_pk>/use/", SheetBridgeUse.as_view()),
     path("api/auth/me/avatar/", ProfileAvatar.as_view()),
     path("api/characters/<int:pk>/avatar/", CharacterAvatar.as_view()),
+    path("api/scene/targets/", SceneTargets.as_view()),
+    path("api/scene/targets/<int:pk>/", SceneTargetDetail.as_view()),
+    path("api/scene/damage/", DamageRequests.as_view()),
+    path("api/scene/damage/<int:pk>/resolve/", ResolveDamage.as_view()),
     path("api/room/", RoomView.as_view()),
     path("api/room/table-visibility/", RoomTableVisibility.as_view()),
     path("api/room/events/", RoomEvents.as_view()),

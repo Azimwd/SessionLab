@@ -218,6 +218,8 @@ def perform_roll(campaign, user, data):
 
 
 def use_ability(campaign, user, pk, data):
+    if data.get("mode", "normal") not in ("normal", "advantage", "disadvantage"):
+        raise ValidationError("Неизвестный режим броска")
     ability = get_object_or_404(
         CharacterAbility, pk=pk, character__campaign=campaign, active=True
     )

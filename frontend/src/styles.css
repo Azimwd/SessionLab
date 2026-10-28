@@ -4291,3 +4291,18 @@ blockquote {
 @media(max-width:700px){.header-nav{flex-wrap:wrap;overflow:visible}.header-dropdown-panel{max-width:calc(100vw - 28px)}}
 .spell-description .preserve-lines{white-space:pre-wrap;overflow-wrap:anywhere}
 .spell-description summary{cursor:pointer;font-weight:700;color:var(--accent)}
+
+/* Scene combatants: public identity and private adjudication. */
+.scene-panel { margin: 24px 0; }
+.scene-target-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:16px 0 24px; }
+.scene-target-card { border:1px solid var(--border,#303642);border-radius:14px;padding:16px;background:var(--surface,#1a1e2610); }
+.scene-target-card .actions { flex-wrap:wrap; }
+.scene-defense-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:12px 0; }
+.scene-target-picker { display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;max-height:260px;overflow:auto;margin:12px 0; }
+.scene-target-picker label { display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--border,#303642);border-radius:10px;cursor:pointer; }
+.scene-target-picker label.selected { border-color:#9085ff;background:#9085ff14; }
+.scene-target-picker input { width:18px;min-height:18px;accent-color:#695cf5; }
+.scene-damage-chooser { margin-top:16px; }
+.scene-chooser-body { padding:12px 0; }
+.scene-requests>div { display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0;border-bottom:1px solid var(--border,#303642); }
+.scene-requests small { display:block;margin-top:4px;opacity:.65; }

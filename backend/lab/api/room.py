@@ -147,6 +147,11 @@ def room_data(c, user, dm):
                 **details,
             }
         )
+    if not dm:
+        for row in party + npcs:
+            if row['owner'] != user.id or row['kind'] == 'npc':
+                for key in ('hp_current', 'hp_max', 'hp_temp'):
+                    row.pop(key, None)
     tracker = InitiativeTracker.objects.filter(session=s).first() if s else None
     return Response(
         {
@@ -217,7 +222,7 @@ class RoomEvents(APIView):
     def get(self, request):
         c = campaign_for(request)
         qs = (
-            RoomEvent.objects.filter(campaign=c).select_related("actor").order_by("-id")
+            RoomEvent.objects.filter(campaign=c).select_related("actor", "character").order_by("-id")
         )
         if request.query_params.get("session"):
             try:
@@ -229,7 +234,7 @@ class RoomEvents(APIView):
             qs = qs.filter(visibility="public")
         paginator = PageNumberPagination()
         rows = paginator.paginate_queryset(qs, request)
-        return paginator.get_paginated_response(EventSerializer(rows, many=True).data)
+        return paginator.get_paginated_response(EventSerializer(rows, many=True, context={"user": request.user, "hide_health": not is_dm(c, request.user) or request.query_params.get("view") == "player"}).data)
 
 
 def change_initiative(c, user, data):

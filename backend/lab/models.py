@@ -539,3 +539,43 @@ class InitiativeEntry(Timestamped):
     class Meta:
         constraints = [models.UniqueConstraint(fields=['tracker', 'player_slot'], name='one_player_initiative')]
         ordering = ["-initiative", "-dexterity", "id"]
+
+
+class SceneTarget(Timestamped):
+    """An independent combatant; NPC sheets remain reusable templates."""
+    session = models.ForeignKey(GameSession, on_delete=models.CASCADE, related_name='scene_targets')
+    source = models.ForeignKey(Character, on_delete=models.PROTECT, related_name='scene_instances')
+    name = models.CharField(max_length=100)
+    visible = models.BooleanField(default=True)
+    targetable = models.BooleanField(default=True)
+    active = models.BooleanField(default=True)
+    linked_sheet = models.BooleanField(default=False)
+    hp_max = models.PositiveIntegerField(default=10)
+    hp_current = models.PositiveIntegerField(default=10)
+    hp_temp = models.PositiveIntegerField(default=0)
+    conditions = models.JSONField(default=list, blank=True)
+    defenses = models.JSONField(default=dict, blank=True)
+    version = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(condition=Q(hp_current__lte=models.F('hp_max')), name='scene_hp_within_max'),
+            models.UniqueConstraint(fields=['session', 'source'], condition=Q(linked_sheet=True, active=True), name='one_linked_scene_player'),
+        ]
+
+
+class DamageApplication(Timestamped):
+    target = models.ForeignKey(SceneTarget, on_delete=models.PROTECT, related_name='damage_requests')
+    source_event = models.ForeignKey(RoomEvent, on_delete=models.PROTECT, related_name='damage_requests')
+    requester = models.ForeignKey(User, on_delete=models.PROTECT, related_name='damage_requests')
+    part_index = models.PositiveSmallIntegerField(default=0)
+    is_attack = models.BooleanField(default=False)
+    status = models.CharField(max_length=12, default='pending')
+    resolution = models.JSONField(default=dict, blank=True)
+    resolved_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, related_name='+')
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['source_event', 'part_index', 'target'], condition=Q(status__in=['pending', 'applied']), name='one_damage_per_target_part'),
+            models.UniqueConstraint(fields=['source_event', 'part_index'], condition=Q(is_attack=True, status__in=['pending', 'applied']), name='one_target_per_attack_part'),
+        ]
