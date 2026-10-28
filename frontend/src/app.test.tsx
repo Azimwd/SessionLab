@@ -544,3 +544,10 @@ it('explains why a spell cannot be applied without an active session', async()=>
   expect(screen.getByRole('button',{name:'Применить'})).toBeDisabled();
   expect(screen.getByText('В кампании нет активной сессии. Мастер должен начать сессию.')).toBeVisible();
 });
+it('saves the main magic characteristic from the overview',async()=>{
+ mount('/sheet');
+ const select=await screen.findByRole('combobox',{name:'Основная характеристика магии'});
+ expect(select).toHaveValue('cha');
+ fireEvent.change(select,{target:{value:'dex'}});
+ await waitFor(()=>expect(mutation).toMatchObject({url:'/characters/1/sheet/?campaign=1',method:'PATCH',body:{spell_ability:'dex'}}));
+});

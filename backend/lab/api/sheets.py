@@ -172,6 +172,9 @@ class AbilitySerializer(serializers.ModelSerializer):
             raise ValidationError("Количество бросков: 1–20; добавочные броски: 0–5")
         if len(get("description", "")) > 10000:
             raise ValidationError("Описание слишком длинное")
+        # An explicit stat from older editors remains a per-spell override.
+        if 'ability' in data and 'use_spell_ability' not in data:
+            data['use_spell_ability'] = False
         return data
 
 
@@ -406,7 +409,7 @@ class AddCatalogSpell(APIView):
             existing = char.actions.filter(catalog_entry=entry, active=True).first()
             if existing:
                 return AbilitySerializer(existing).data
-            template = {**entry.template, "kind": "spell", "name": entry.name_ru, "level": entry.level, "ability": sheet_for(char).spell_ability}
+            template = {**entry.template, "kind": "spell", "name": entry.name_ru, "level": entry.level, "ability": sheet_for(char).spell_ability, "use_spell_ability": True}
             form = AbilitySerializer(data=template)
             form.is_valid(raise_exception=True)
             form.save(character=char, catalog_entry=entry)

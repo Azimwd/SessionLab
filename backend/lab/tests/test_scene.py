@@ -199,3 +199,22 @@ def test_room_history_redacts_foreign_health(world):
     public=client(world[2]).get(scoped('/api/room/events/',c)).json()['data']['results'][0]
     assert 'hp_current' not in public['payload'] and 'hp_max' not in public['payload']
     assert client(dm).get(scoped('/api/room/events/',c)).json()['data']['results'][0]['payload']['hp_current']==7
+
+
+def test_scene_numbering_reuses_removed_instances_and_ignores_other_sessions(world):
+    dm,_,_,c,_,session=world
+    npc,ts=targets(world)
+    path=scoped('/api/scene/targets/',c)
+    def add(count=1):
+        r=post(client(dm),path,{'source':npc.pk,'count':count})
+        assert r.status_code==200,r.content
+        return r.json()['data']['targets']
+    # Removing #1 cannot create a duplicate #2.
+    SceneTarget.objects.filter(pk=ts[0]['id']).update(active=False)
+    assert add()[0]['name']=='Стражник № 1'
+    SceneTarget.objects.filter(session=session).update(active=False)
+    assert [t['name'] for t in add(2)]==['Стражник № 1','Стражник № 2']
+    # A closed session, including its active historical rows, reserves nothing.
+    session.status='completed';session.save()
+    GameSession.objects.create(campaign=c,name='Next',status='active')
+    assert add()[0]['name']=='Стражник № 1'

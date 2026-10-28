@@ -2,12 +2,12 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import Scene, { TargetDamage } from './Scene';
 import ActionList from '../sheets/ActionList';
-const mocks=vi.hoisted(()=>({master:false,mutate:vi.fn(),targets:[] as any[],requests:[] as any[]}));
+const mocks=vi.hoisted(()=>({master:false,mutate:vi.fn(),targets:[] as any[],requests:[] as any[],history:null as any,paths:[] as string[]}));
 vi.mock('../../app',()=>({useApp:()=>({masterMode:mocks.master,cid:'1',sid:'1',user:{id:1},refresh:vi.fn(),notify:vi.fn()}),
- useData:(path:string)=>({data:path.startsWith('/scene/targets/')?{targets:mocks.targets,damage_types:{fire:'Огонь',cold:'Холод'}}:mocks.requests,isPending:false}),
+ useData:(path:string)=>{mocks.paths.push(path);return ({data:path.startsWith('/scene/targets/')?{targets:mocks.targets,damage_types:{fire:'Огонь',cold:'Холод'}}:mocks.history??mocks.requests,isPending:false})},
  useAction:()=>({mutate:mocks.mutate,isPending:false,error:null})}));
 afterEach(cleanup);
-beforeEach(()=>{mocks.master=false;mocks.mutate.mockReset();mocks.requests=[];mocks.targets=[{id:1,name:'Стражник № 1',targetable:true,hp_current:19,hp_max:40,visible:true},{id:2,name:'Стражник № 2',targetable:true,hp_current:40,hp_max:40,visible:true}];});
+beforeEach(()=>{mocks.master=false;mocks.mutate.mockReset();mocks.requests=[];mocks.history=null;mocks.paths=[];mocks.targets=[{id:1,name:'Стражник № 1',targetable:true,hp_current:19,hp_max:40,visible:true},{id:2,name:'Стражник № 2',targetable:true,hp_current:40,hp_max:40,visible:true}];});
 it('players see identities without HP or management, even if a cached object contained health',()=>{
  render(<Scene characters={[]}/>);
  expect(screen.getByText('Стражник № 1')).toBeInTheDocument();
@@ -74,4 +74,39 @@ it('healing chooses targets without attack or save prompts and cannot alter the 
  fireEvent.click(screen.getByText('Вылечить (1)'));
  expect(mocks.mutate.mock.calls[0][0].body).toEqual({source_event:91,part_index:0,targets:[1],outcomes:{'1':{}}});
  expect(screen.queryByText('19/40')).not.toBeInTheDocument();
+});
+
+it('history navigates server pages and provides a bounded keyboard-scrollable region',()=>{
+ mocks.history={results:[{id:12,label:'Лечение ран',target_name:'Флора',requester_name:'Игрок',effect:'healing'}],next_cursor:12};
+ render(<Scene characters={[]}/>);
+ expect(screen.getByRole('region',{name:'История урона и лечения'})).toHaveAttribute('tabindex','0');
+ expect(screen.getByRole('button',{name:'Назад'})).toBeDisabled();
+ fireEvent.click(screen.getByRole('button',{name:'Далее'}));
+ expect(mocks.paths.some(p=>p.includes('page_size=10&before=12'))).toBe(true);
+ expect(screen.getByText('Страница 2')).toBeInTheDocument();
+ fireEvent.click(screen.getByRole('button',{name:'К последним'}));
+ expect(screen.getByText('Страница 1')).toBeInTheDocument();
+});
+it('selects all attack rolls, picks a target once and applies independent hit outcomes in one request',()=>{
+ render(<TargetDamage event={{id:92,kind:'ability',payload:{damage_type:'fire',parts:[{damage:{total:10},roll:{total:20}},{damage:{total:7},roll:{total:17}},{damage:{total:6},roll:{total:12}}]}}}/>);
+ fireEvent.click(screen.getByText('Применить к цели'));
+ fireEvent.click(screen.getByText('Выбрать все'));
+ fireEvent.click(screen.getByLabelText('Стражник № 1'));
+ expect(screen.getByText('Нанести урон (3 броска, целей: 1)')).toBeDisabled();
+ fireEvent.click(screen.getByText('Все выбранные атаки попали'));
+ fireEvent.change(screen.getByLabelText('Попадание · бросок 3: Стражник № 1'),{target:{value:'miss'}});
+ fireEvent.click(screen.getByText('Нанести урон (3 броска, целей: 1)'));
+ expect(mocks.mutate).toHaveBeenCalledTimes(1);
+ expect(mocks.mutate.mock.calls[0][0].body).toEqual({source_event:92,parts:[
+  {part_index:0,targets:[1],outcomes:{'1':{hit:true}}},
+  {part_index:1,targets:[1],outcomes:{'1':{hit:true}}},
+  {part_index:2,targets:[1],outcomes:{'1':{hit:false}}}
+ ]});
+});
+it('allows deselecting all parts without applying anything',()=>{
+ render(<TargetDamage event={{id:93,kind:'ability',payload:{parts:[{damage:{total:10}},{damage:{total:7}}]}}}/>);
+ fireEvent.click(screen.getByText('Применить к цели'));fireEvent.click(screen.getByText('Снять выбор'));
+ fireEvent.click(screen.getByLabelText('Стражник № 1'));
+ expect(screen.getByText('Нанести урон (1)')).toBeDisabled();
+ expect(mocks.mutate).not.toHaveBeenCalled();
 });

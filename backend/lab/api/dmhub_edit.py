@@ -122,7 +122,7 @@ class SheetBridgeCatalogAdd(PersonalSheetAPI):
             if char.actions.filter(active=True).count() >= 200:
                 raise ValidationError('Лимит: 200 активных действий на персонажа')
             template = {**entry.template, 'kind': 'spell', 'name': entry.name_ru,
-                        'level': entry.level, 'ability': sheet_for(char).spell_ability}
+                        'level': entry.level, 'ability': sheet_for(char).spell_ability, 'use_spell_ability': True}
             form = AbilitySerializer(data=template)
             form.is_valid(raise_exception=True)
             form.save(character=char, catalog_entry=entry)

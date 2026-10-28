@@ -107,10 +107,23 @@ def create_targets(c, user, data):
     base = str(data.get('name') or source.name).strip()
     if not base or len(base)>85:
         raise ValidationError('Имя цели: от 1 до 85 символов')
-    existing = SceneTarget.objects.filter(session=s, source=source).count()
+    # Retired instances stay in history but must not reserve display numbers.
+    # Fill gaps rather than count rows: removing #1 while #2 remains must not
+    # produce a second #2. The campaign lock serializes website/native writes.
+    names = SceneTarget.objects.filter(session=s, source=source, active=True).values_list('name', flat=True)
+    used = set()
+    prefix = f'{base} № '
+    for name in names:
+        suffix = name[len(prefix):] if name.startswith(prefix) else ''
+        if suffix.isdigit():
+            used.add(int(suffix))
+    next_number = 1
     created = []
     for i in range(count):
-        name = base if linked else f'{base} № {existing+i+1}'
+        while next_number in used:
+            next_number += 1
+        name = base if linked else f'{base} № {next_number}'
+        used.add(next_number)
         t = SceneTarget.objects.create(session=s, source=source, name=name, linked_sheet=linked,
             hp_max=sh.hp_max, hp_current=sh.hp_max, defenses=protection)
         created.append(target_data(t, True))
@@ -284,6 +297,34 @@ def apply_damage(row, campaign, user, data, privileged=False):
 
 
 def submit_damage(c, user, data):
+    """Apply selected parts atomically under the caller's campaign transaction."""
+    if 'parts' not in data:
+        return submit_damage_part(c, user, data)
+    if set(data) - {'source_event', 'parts'}:
+        raise ValidationError('Для нескольких бросков передайте source_event и parts')
+    parts = data['parts']
+    if not isinstance(parts, list) or not 1 <= len(parts) <= 20:
+        raise ValidationError('Выберите от 1 до 20 бросков')
+    seen, total = set(), 0
+    for item in parts:
+        if not isinstance(item, dict) or set(item) - {'part_index', 'targets', 'outcomes'}:
+            raise ValidationError('Некорректные настройки броска')
+        index = integer(item.get('part_index'), 'Часть броска', 0, 19)
+        if index in seen:
+            raise ValidationError('Один бросок нельзя выбрать дважды')
+        seen.add(index)
+        if not isinstance(item.get('targets'), list):
+            raise ValidationError('Выберите цели каждого броска')
+        total += len(item['targets'])
+    if total > 200:
+        raise ValidationError('За один раз можно применить не более 200 результатов по целям')
+    result = []
+    for item in parts:
+        result.extend(submit_damage_part(c, user, {'source_event': data.get('source_event'), **item}))
+    return result
+
+
+def submit_damage_part(c, user, data):
     s = active_session(c)
     dm = is_dm(c, user)
     if set(data) - {'source_event', 'part_index', 'targets', 'outcomes'}:
@@ -339,6 +380,21 @@ class DamageRequests(APIView):
         status = request.query_params.get('status')
         if status in ('pending', 'applied', 'rejected'):
             rows = rows.filter(status=status)
+        if 'page_size' in request.query_params or 'before' in request.query_params:
+            def query_number(key, default, high):
+                raw = request.query_params.get(key, str(default))
+                if not raw.isascii() or not raw.isdigit() or len(raw) > 19:
+                    raise ValidationError(f'{key}: ожидается положительное целое число')
+                return integer(int(raw), key, 1, high)
+            size = query_number('page_size', 10, 50)
+            if 'before' in request.query_params:
+                rows = rows.filter(id__lt=query_number('before', 1, 9223372036854775807))
+            page = list(rows[:size+1])
+            has_next = len(page) > size
+            page = page[:size]
+            return Response({'results': [application_data(r, dm) for r in page],
+                             'next_cursor': page[-1].id if has_next else None})
+        # Preserve the array contract for older clients.
         return Response([application_data(r, dm) for r in rows[:100]])
 
     def post(self, request):

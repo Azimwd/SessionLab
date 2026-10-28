@@ -471,6 +471,7 @@ class CharacterAbility(Timestamped):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
     ability = models.CharField(max_length=3, default="str")
+    use_spell_ability = models.BooleanField(default=False)
     proficient = models.BooleanField(default=True)
     bonus = models.SmallIntegerField(default=0)
     resolution = models.CharField(

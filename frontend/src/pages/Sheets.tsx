@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, BookOpen, Pencil, FolderPlus, Trash2 } from 'lucide-react';
 import { useApp, useAction, useData } from '../app';
@@ -7,16 +7,23 @@ import type { Json } from '../api/client';
 import SheetEditor from '../features/sheets/SheetEditor';
 import { folderKey, folderOptions } from '../features/room/folderOptions';
 
-export default function Sheets() {
+function SheetsPage() {
   const a=useApp(); const [params,setParams]=useSearchParams();
   const [editor,setEditor]=useState<'new'|'edit'|null>(null),[folderModal,setFolderModal]=useState(false),[deleting,setDeleting]=useState(false),[folderFilter,setFolderFilter]=useState('auto');const action=useAction('Сохранено');
+  const lastSheetKey=`sl:last-sheet:${a.user.id}:${a.cid}:${a.masterMode?'dm':'player'}`;
+  const [remembered,setRemembered]=useState(()=>{try{return localStorage.getItem(lastSheetKey)||'';}catch{return '';}});
   const folders=useData<Json>('/character-folders/?campaign='+a.cid,!!a.cid);
   const chars=a.characters.filter(c=>c.active&&(a.masterMode||(c.kind!=='npc'&&c.owner===a.user.id)));
   const folderList:Json[]=folders.data?.results||[];
-  const initial=chars.find(c=>String(c.id)===params.get('character'))||chars.find(c=>String(c.id)===a.charId)||chars[0];
+  const initial=chars.find(c=>String(c.id)===params.get('character'))||chars.find(c=>String(c.id)===remembered)||chars.find(c=>String(c.id)===a.charId)||chars[0];
   const selectedFolder=folderFilter==='auto' ? initial ? folderKey(initial) : String(folderList.find(f=>f.is_system)?.id || 'unfiled') : folderFilter;
   const visibleChars=chars.filter(c=>folderKey(c)===selectedFolder);
-  const character=visibleChars.find(c=>String(c.id)===params.get('character'))||visibleChars.find(c=>String(c.id)===a.charId)||visibleChars[0];
+  const character=visibleChars.find(c=>String(c.id)===params.get('character'))||visibleChars.find(c=>String(c.id)===remembered)||visibleChars.find(c=>String(c.id)===a.charId)||visibleChars[0];
+  useEffect(()=>{
+    if(!character)return;
+    const id=String(character.id);setRemembered(id);
+    try{localStorage.setItem(lastSheetKey,id);}catch{/* Browsing still works if storage is unavailable. */}
+  },[character?.id,lastSheetKey]);
   const choices=folderOptions(folderList,chars);
   return <><Header eyebrow={a.masterMode?'ПРОСТРАНСТВО МАСТЕРА':'ЛИСТ ПЕРСОНАЖА'} title={a.masterMode?'Листы группы':'Мои персонажи'} subtitle={a.masterMode?'Откройте любой лист, помогите игроку и бросайте от лица его персонажа.':'Характеристики, атаки и магия — в одном месте.'} action={<Button variant="secondary" onClick={()=>setEditor('new')}><Plus size={16}/> Новый персонаж</Button>}/>
     <div className="sheet-folders"><Field label="Папка листов"><select aria-label="Папка листов группы" value={selectedFolder} onChange={e=>{const id=e.target.value;setFolderFilter(id);const first=chars.find(c=>folderKey(c)===id);setParams(first?{character:String(first.id)}:{});}}>{choices.map(([id,name])=><option key={id} value={id}>{name} · {chars.filter(c=>folderKey(c)===id).length}</option>)}</select></Field><Button variant="secondary" onClick={()=>setFolderModal(true)}><FolderPlus size={16}/> Создать папку</Button>{folderList.find(f=>String(f.id)===selectedFolder&&!f.is_system)&&<Button variant="ghost" aria-label="Удалить выбранную папку" disabled={action.isPending} onClick={()=>{const folder=folderList.find(f=>String(f.id)===selectedFolder);if(folder&&window.confirm(`Удалить папку «${folder.name}»? Листы останутся без папки.`))action.mutate({path:`/character-folders/${folder.id}/?campaign=${a.cid}`,method:'DELETE'},{onSuccess:()=>{setFolderFilter('unfiled');setParams({});}});}}><Trash2 size={15}/> Удалить папку</Button>}</div>
@@ -31,4 +38,9 @@ export default function Sheets() {
     {deleting&&character&&<Confirm title={`Удалить «${character.name}»?`} text="Лист будет скрыт из списка. История бросков и сессий сохранится." busy={action.isPending} onClose={()=>setDeleting(false)} onConfirm={()=>action.mutate({path:`/characters/${character.id}/?campaign=${a.cid}`,method:'DELETE'},{onSuccess:()=>{setDeleting(false);setParams({});if(!a.masterMode)a.selectCharacter('');}})}/>}
 
   </>;
+}
+
+export default function Sheets() {
+  const a=useApp();
+  return <SheetsPage key={`${a.user.id}:${a.cid}:${a.masterMode?'dm':'player'}`}/>;
 }

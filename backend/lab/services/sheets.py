@@ -258,7 +258,7 @@ def use_ability(campaign, user, pk, data):
             raise ValidationError("Нет свободных ячеек этого уровня")
         sheet.slots = {**sheet.slots, str(level): {**slot, "used": slot["used"] + 1}}
     # Catalog defaults are copied on addition; the saved per-action choice is authoritative.
-    casting_ability = ability.ability
+    casting_ability = sheet.spell_ability if ability.kind == "spell" and ability.use_spell_ability else ability.ability
     bonus = (
         modifier(sheet, casting_ability)
         + (proficiency(sheet) if ability.proficient else 0)

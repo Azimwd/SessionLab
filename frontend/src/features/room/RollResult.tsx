@@ -25,7 +25,7 @@ export function RollResult({ event, large = false, allowApply = false }: { event
     {p.description && <details><summary>Описание действия</summary><p className="preserve-lines">{p.description}</p></details>}
     {p.adjudication && <p className="save-callout" role="status">{p.adjudication}</p>}
     {p.components && <small>Компоненты: {p.components}</small>}
-    {allowApply && <TargetDamage event={event}/>}
+    {allowApply && <TargetDamage key={event.id} event={event}/>}
     {p.kind && <small className="muted">Урон и лечение применяются после решения за столом.</small>}
   </motion.article>;
 }
