@@ -1,3 +1,4 @@
+from django.utils import timezone
 from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
@@ -41,7 +42,7 @@ def own_character(request, campaign, pk, dm=False):
 
 class CampaignViewSet(viewsets.ModelViewSet):
     serializer_class = CampaignSerializer
-    http_method_names = ["get", "post", "patch", "head", "options"]
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
     search_fields = ["name"]
     ordering_fields = ["name", "created_at"]
 
@@ -49,7 +50,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
         if getattr(self, "swagger_fake_view", False):
             return Campaign.objects.none()
         return Campaign.objects.filter(
-            memberships__user=self.request.user, memberships__active=True
+            memberships__user=self.request.user, memberships__active=True, deleted_at__isnull=True
         ).order_by("-created_at")
 
     def perform_create(self, serializer):
@@ -72,13 +73,34 @@ class CampaignViewSet(viewsets.ModelViewSet):
 
         return mutate(request, kwargs["pk"], op, True)
 
+    def destroy(self, request, *args, **kwargs):
+        # Keep protected historical records; revoke every entry point atomically.
+        # Repeated DELETE by the owner is safe even after membership revocation.
+        if not isinstance(request.data, dict):
+            raise ValidationError("Ожидается JSON-объект")
+        with transaction.atomic():
+            campaign = get_object_or_404(Campaign.objects.select_for_update(), pk=kwargs["pk"])
+            if campaign.owner_id != request.user.pk:
+                raise PermissionDenied("Удалить кампанию может только её владелец")
+            if request.data.get("confirm_name") != campaign.name:
+                raise ValidationError("Для удаления введите точное название кампании")
+            if campaign.deleted_at is None:
+                campaign.deleted_at = timezone.now()
+                campaign.save(update_fields=["deleted_at", "updated_at"])
+                Membership.objects.filter(campaign=campaign).update(active=False)
+                DMHubBridge.objects.filter(campaign=campaign).update(enabled=False)
+                DMHubSheetAccess.objects.filter(campaign=campaign).update(enabled=False)
+                AuditLog.objects.create(campaign=campaign, actor=request.user,
+                                        action="campaign.delete", details={})
+            return Response({"id": campaign.pk, "deleted": True})
+
     @action(detail=False, methods=["post"], url_path="join")
     @extend_schema(request=OpenApiTypes.OBJECT, responses=CampaignSerializer)
     def join(self, request):
         code = request.data.get("code", "")
         with transaction.atomic():
             campaign = get_object_or_404(
-                Campaign.objects.select_for_update(), invite_code=code
+                Campaign.objects.select_for_update(), invite_code=code, deleted_at__isnull=True
             )
             member, created = Membership.objects.get_or_create(
                 campaign=campaign, user=request.user

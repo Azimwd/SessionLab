@@ -40,6 +40,7 @@ class Timestamped(models.Model):
 
 
 class Campaign(Timestamped):
+    deleted_at = models.DateTimeField(null=True, blank=True)
     name = models.CharField(max_length=120)
     description = models.TextField(blank=True)
     owner = models.ForeignKey(

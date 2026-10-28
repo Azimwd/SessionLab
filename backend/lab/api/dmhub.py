@@ -134,7 +134,7 @@ def bridge_events(request):
         return JsonResponse({"data": None, "error": "Недействительный ключ моста"}, status=401)
     digest = bridge_hash(token)
     # Hash comparison is constant time; an indexed token is never exposed to the browser.
-    bridge = DMHubBridge.objects.select_related("campaign").filter(token_hash=digest, enabled=True).first()
+    bridge = DMHubBridge.objects.select_related("campaign").filter(token_hash=digest, enabled=True, campaign__deleted_at__isnull=True).first()
     if bridge is None or not hmac.compare_digest(bridge.token_hash, digest):
         return JsonResponse({"data": None, "error": "Недействительный ключ моста"}, status=401)
     events = RoomEvent.objects.filter(

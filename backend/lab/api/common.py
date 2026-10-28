@@ -42,7 +42,7 @@ def campaign_for(request, pk=None, dm=False, lock=False):
     try:
         campaign = (
             Campaign.objects.select_for_update() if lock else Campaign.objects
-        ).get(pk=int(pk))
+        ).get(pk=int(pk), deleted_at__isnull=True)
     except (Campaign.DoesNotExist, ValueError, TypeError):
         raise NotFound("Кампания не найдена")
     member = Membership.objects.filter(

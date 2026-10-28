@@ -102,7 +102,7 @@ def access_for(request):
         raise NotAuthenticated('Недействительный ключ листа')
     token_hash = digest(token)
     access = DMHubSheetAccess.objects.select_related('campaign', 'user').filter(
-        token_hash=token_hash, enabled=True,
+        token_hash=token_hash, enabled=True, campaign__deleted_at__isnull=True,
     ).first()
     if not access or not hmac.compare_digest(access.token_hash, token_hash):
         raise NotAuthenticated('Недействительный ключ листа')
@@ -137,7 +137,7 @@ def response_for(request, access, operation):
     with transaction.atomic():
         campaign = Campaign.objects.select_for_update().get(pk=access.campaign_id)
         # Revocation/removal may have happened while this request waited for the lock.
-        if not DMHubSheetAccess.objects.filter(pk=access.pk, enabled=True).exists() or not Membership.objects.filter(
+        if campaign.deleted_at is not None or not DMHubSheetAccess.objects.filter(pk=access.pk, enabled=True).exists() or not Membership.objects.filter(
             campaign=campaign, user=access.user, active=True,
         ).exists():
             raise PermissionDenied('Доступ к кампании закрыт')
