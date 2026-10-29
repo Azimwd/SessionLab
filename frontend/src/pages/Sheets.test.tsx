@@ -26,3 +26,28 @@ it('an unavailable remembered sheet falls back to an accessible character',()=>{
  localStorage.setItem('sl:last-sheet:7:1:dm','999');mount();
  expect(screen.getByText('Лист: Мира')).toBeInTheDocument();
 });
+it('pins sheets across folders and switches directly without searching folders',()=>{
+ mount();fireEvent.click(screen.getByRole('button',{name:'Закрепить лист'}));
+ fireEvent.change(screen.getByLabelText('Папка листов группы'),{target:{value:'20'}});
+ fireEvent.click(screen.getByRole('button',{name:'Закрепить лист'}));
+ fireEvent.click(screen.getByRole('button',{name:'Открыть закреплённый лист Мира'}));
+ expect(screen.getByText('Лист: Мира')).toBeInTheDocument();
+ expect(screen.getByLabelText('Папка листов группы')).toHaveValue('10');
+ fireEvent.click(screen.getByRole('button',{name:'Открыть закреплённый лист Флора'}));
+ expect(screen.getByText('Лист: Флора')).toBeInTheDocument();
+ expect(screen.getByLabelText('Папка листов группы')).toHaveValue('20');
+ expect(screen.getByRole('button',{name:'Открыть закреплённый лист Флора'})).toHaveAttribute('aria-current','page');
+});
+it('persists pins, allows unpinning, and keeps campaigns separate',()=>{
+ const view=mount();fireEvent.click(screen.getByRole('button',{name:'Закрепить лист'}));view.unmount();
+ const restored=mount();expect(screen.getByRole('button',{name:'Открыть закреплённый лист Мира'})).toBeInTheDocument();
+ fireEvent.click(screen.getByRole('button',{name:'Убрать из закреплённых: Мира'}));
+ expect(screen.queryByRole('button',{name:'Открыть закреплённый лист Мира'})).not.toBeInTheDocument();
+ restored.unmount();localStorage.setItem('sl:pinned-sheets:7:1:dm','["2"]');mocks.cid='2';mount();
+ expect(screen.queryByRole('button',{name:'Открыть закреплённый лист Флора'})).not.toBeInTheDocument();
+});
+it('does not display unavailable or forbidden pinned sheets',()=>{
+ localStorage.setItem('sl:pinned-sheets:7:1:player','["1","2","999"]');mocks.master=false;mount('/sheet');
+ expect(screen.getByRole('button',{name:'Открыть закреплённый лист Мира'})).toBeInTheDocument();
+ expect(screen.queryByRole('button',{name:'Открыть закреплённый лист Флора'})).not.toBeInTheDocument();
+});
