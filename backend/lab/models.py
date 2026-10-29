@@ -489,6 +489,10 @@ class CharacterAbility(Timestamped):
     upcast_count = models.PositiveSmallIntegerField(default=0)
     cantrip_scaling = models.BooleanField(default=False)
     save_ability = models.CharField(max_length=3, default="dex")
+    save_success = models.CharField(max_length=8, default="rules", choices=[
+        ("rules", "По правилам каталога"), ("none", "Нет урона"),
+        ("half", "Половина урона"), ("full", "Полный урон"),
+    ])
     casting_time = models.CharField(max_length=255, default="1 действие")
     range = models.CharField(max_length=80, blank=True)
     duration = models.CharField(max_length=80, blank=True)

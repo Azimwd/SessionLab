@@ -91,3 +91,21 @@ def test_native_damage_rejects_tampering_and_foreign_events(world):
     foreign=RoomEvent.objects.create(campaign=other,session=other_session,actor=player,kind='ability',payload=e.payload)
     assert command(user,session,{**base,'source_event':foreign.pk}).status_code==404
     assert not DamageApplication.objects.exists()
+
+
+def test_native_scene_applies_selected_parts_in_one_idempotent_command(world):
+    dm,p,_,c,ch,s=world
+    _,ts=targets(world,{'fire':'resistance'})
+    e=event(world)
+    e.payload={'damage_type':'fire','parts':[{'damage':{'total':v},'roll':{'total':18}} for v in [11,7,6]]}
+    e.save()
+    target=ts[0]['id'];api=personal(p,c)
+    data={'command':'damage','source_event':e.pk,'parts':[
+        {'part_index':i,'targets':[target],'outcomes':{str(target):{'hit':True}}} for i in [0,2]]}
+    response=command(api,s,data,'native-multi-once')
+    assert response.status_code==200,response.content
+    assert len(response.json()['data']['applications'])==2
+    assert command(api,s,data,'native-multi-once').json()==response.json()
+    assert SceneTarget.objects.get(pk=target).hp_current==32
+    assert DamageApplication.objects.filter(source_event=e).count()==2
+    assert 'hp_current' not in str(response.json()) and 'resolution' not in str(response.json())

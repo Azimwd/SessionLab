@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import Scene, { TargetDamage } from './Scene';
 import ActionList from '../sheets/ActionList';
+import AbilityEditor from '../sheets/AbilityEditor';
 const mocks=vi.hoisted(()=>({master:false,mutate:vi.fn(),targets:[] as any[],requests:[] as any[],history:null as any,paths:[] as string[]}));
 vi.mock('../../app',()=>({useApp:()=>({masterMode:mocks.master,cid:'1',sid:'1',user:{id:1},refresh:vi.fn(),notify:vi.fn()}),
  useData:(path:string)=>{mocks.paths.push(path);return ({data:path.startsWith('/scene/targets/')?{targets:mocks.targets,damage_types:{fire:'Огонь',cold:'Холод'}}:mocks.history??mocks.requests,isPending:false})},
@@ -108,4 +109,12 @@ it('allows deselecting all parts without applying anything',()=>{
  fireEvent.click(screen.getByLabelText('Стражник № 1'));
  expect(screen.getByText('Нанести урон (1)')).toBeDisabled();
  expect(mocks.mutate).not.toHaveBeenCalled();
+});
+
+it('custom spells can select half damage on a successful save',()=>{
+ render(<AbilityEditor characterId={1} kind="spell" spellAbility="cha" onClose={()=>{}}/>);
+ fireEvent.change(screen.getByLabelText('Название'),{target:{value:'Моё заклинание'}});
+ fireEvent.change(screen.getByLabelText('Урон при успешном спасброске'),{target:{value:'half'}});
+ fireEvent.submit(screen.getByLabelText('Название').closest('form')!);
+ expect(mocks.mutate.mock.calls[0][0].body.save_success).toBe('half');
 });

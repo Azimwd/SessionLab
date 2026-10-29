@@ -349,13 +349,16 @@ def use_ability(campaign, user, pk, data):
         )
     if payload['resolution'] == 'save':
         template = ability.catalog_entry.template if ability.catalog_entry_id else {}
+        success = ability.save_success
+        if success == 'rules':
+            success = 'half' if template.get('save_half') else 'full' if template.get('save_success_full') else 'none'
         for part in parts:
             if 'damage' in part:
                 damage = part['damage']['total']
                 part['save']['failed_damage'] = damage
                 part['save']['success_damage'] = (
-                    damage // 2 if template.get('save_half') else
-                    damage if template.get('save_success_full') else 0
+                    damage // 2 if success == 'half' else
+                    damage if success == 'full' else 0
                 )
         if len(parts) == 1 and parts[0].get('save'):
             payload['save'] = parts[0]['save']
