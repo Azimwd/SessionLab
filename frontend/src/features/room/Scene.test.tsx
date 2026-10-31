@@ -118,3 +118,14 @@ it('custom spells can select half damage on a successful save',()=>{
  fireEvent.submit(screen.getByLabelText('Название').closest('form')!);
  expect(mocks.mutate.mock.calls[0][0].body.save_success).toBe('half');
 });
+it('saves different modes for individual attack rolls in the spell editor',()=>{
+ render(<AbilityEditor characterId={1} kind="spell" spellAbility="cha" onClose={()=>{}}/>);
+ fireEvent.change(screen.getByLabelText('Название'),{target:{value:'Три луча'}});
+ fireEvent.change(screen.getByLabelText('Как применяется'),{target:{value:'attack'}});
+ fireEvent.change(screen.getByLabelText(/Количество отдельных бросков/),{target:{value:'3'}});
+ expect(screen.getByLabelText('Режим броска 1')).toHaveValue('normal');
+ fireEvent.change(screen.getByLabelText('Режим броска 1'),{target:{value:'advantage'}});
+ fireEvent.change(screen.getByLabelText('Режим броска 3'),{target:{value:'disadvantage'}});
+ fireEvent.submit(screen.getByLabelText('Название').closest('form')!);
+ expect(mocks.mutate.mock.calls[0][0].body.roll_modes).toEqual(['advantage','normal','disadvantage']);
+});

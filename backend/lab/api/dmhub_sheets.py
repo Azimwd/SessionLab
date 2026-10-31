@@ -51,7 +51,7 @@ def bridge_payload(request):
     if not isinstance(request.data, dict):
         raise ValidationError('Ожидается JSON-объект')
     data = normalize(request.data)
-    for key in ('saves', 'conditions'):
+    for key in ('saves', 'conditions', 'roll_modes'):
         if data.get(key) == {}:
             data[key] = []
     return data
@@ -231,7 +231,8 @@ class SheetBridgeUse(APIView):
         access = access_for(request)
         char = controlled_character(access.campaign, access.user, pk)
         ability = get_object_or_404(char.actions, pk=ability_pk, active=True)
-        data = {k: request.data[k] for k in ('slot_level', 'mode', 'trigger') if k in request.data}
+        incoming = bridge_payload(request)
+        data = {k: incoming[k] for k in ('slot_level', 'mode', 'trigger', 'roll_modes') if k in incoming}
         if 'slot_level' in data:
             data['slot_level'] = bridge_integer(data['slot_level'], 'slot_level')
         data['visibility'] = 'public'

@@ -486,6 +486,7 @@ class CharacterAbility(Timestamped):
     upcast_dice = models.CharField(max_length=80, blank=True)
     upcast_allowed = models.BooleanField(default=True)
     roll_count = models.PositiveSmallIntegerField(default=1)
+    roll_modes = models.JSONField(default=list, blank=True)
     upcast_count = models.PositiveSmallIntegerField(default=0)
     cantrip_scaling = models.BooleanField(default=False)
     save_ability = models.CharField(max_length=3, default="dex")

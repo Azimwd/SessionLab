@@ -437,7 +437,7 @@ it('uses a saved spell through the API with one click and renders separate rolls
   fireEvent.click(await screen.findByRole('tab',{name:'Заклинания'}));
   expect(await screen.findByRole('heading',{name:'Три искры'})).toBeVisible();
   fireEvent.click(screen.getByRole('button',{name:'Применить'}));
-  await waitFor(()=>expect(mutation).toMatchObject({url:'/abilities/9/use/?campaign=1',method:'POST',body:{slot_level:1,mode:'normal',visibility:'public'}}));
+  await waitFor(()=>expect(mutation).toMatchObject({url:'/abilities/9/use/?campaign=1',method:'POST',body:{slot_level:1,visibility:'public'}}));
   await waitFor(()=>expect(screen.getByText('Сумма результатов: 6')).toBeVisible());
   expect(screen.getAllByText(/Бросок [123]/)).toHaveLength(3);
 });

@@ -218,6 +218,11 @@ def perform_roll(campaign, user, data):
 
 
 def use_ability(campaign, user, pk, data):
+    modes = data.get('roll_modes')
+    if 'roll_modes' in data and (not isinstance(modes, list) or len(modes) > 20 or any(
+        not isinstance(mode, str) or mode not in ('normal', 'advantage', 'disadvantage') for mode in modes
+    )):
+        raise ValidationError('Некорректные режимы отдельных бросков')
     if data.get("mode", "normal") not in ("normal", "advantage", "disadvantage"):
         raise ValidationError("Неизвестный режим броска")
     ability = get_object_or_404(
@@ -317,12 +322,15 @@ def use_ability(campaign, user, pk, data):
         payload['adjudication'] = 'Предварительный бросок урона. По правилам он применяется только при срабатывании условия из описания, а не при наложении.'
     if count > 20:
         raise ValidationError("Слишком много отдельных бросков: максимум 20")
+    # Explicit per-roll request > explicit legacy all-roll mode > saved settings.
+    if modes is None:
+        modes = [data['mode']] * count if 'mode' in data else ability.roll_modes
     parts = []
     for index in range(count):
         part = {}
         critical = False
         if payload['resolution'] == "attack":
-            part["roll"] = d20(bonus, data.get("mode", "normal"))
+            part["roll"] = d20(bonus, modes[index] if index < len(modes) else "normal")
             critical = part["roll"]["chosen"] == 20
         elif payload['resolution'] == "save":
             part["save"] = {"ability": effective_save, "dc": payload.get('spell_save_dc', 8 + bonus)}

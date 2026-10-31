@@ -42,7 +42,7 @@ export default function SheetEditor({character}:{character:Json}) {
     return()=>window.clearTimeout(timer);
   },[draft,dirty,valid,stale,save.isPending,save.isError]);
   const roll=useMutation({mutationFn:(body:Json)=>request(`/room/rolls/${suffix}`,'POST',{character:character.id,mode,visibility,...body}),onSuccess:(r)=>{setResult(r);a.refresh();}});
-  const cast=useMutation({mutationFn:({item,level,trigger=false,attackMode}:{item:Json;level:number;trigger?:boolean;attackMode?:string})=>request(`/abilities/${item.id}/use/${suffix}`,'POST',{slot_level:level,trigger,mode:attackMode??mode,visibility}),onSuccess:(r)=>{setResult(r);a.refresh();actions.refetch();},onError:(e)=>a.notify(e.message)});
+  const cast=useMutation({mutationFn:({item,level,trigger=false,attackMode}:{item:Json;level:number;trigger?:boolean;attackMode?:string})=>request(`/abilities/${item.id}/use/${suffix}`,'POST',{slot_level:level,trigger,...(attackMode?{mode:attackMode}:{}),visibility}),onSuccess:(r)=>{setResult(r);a.refresh();actions.refetch();},onError:(e)=>a.notify(e.message)});
   const resource=useMutation({mutationFn:(verb:string)=>request(`/characters/${character.id}/resources/${suffix}`,'POST',{action:verb,amount,version:query.data?.version}),onSuccess:()=>{a.refresh();setConfirm('');}});
   const set=(key:string,value:unknown)=>{const next={...draftRef.current!,[key]:value};draftRef.current=next;setDraft(next);setDirty(true);if(save.isError)save.reset();};
   if(query.isPending || !draft) return query.error?<ErrorBox error={query.error} retry={()=>query.refetch()}/>:<Loading/>;

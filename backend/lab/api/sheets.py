@@ -151,6 +151,13 @@ class AbilitySerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "character", "version", "catalog_entry", "rules_verified", "rules_recurring", "rules_deferred", "rules_fixed_dc", "rules_possible_saves"]
         extra_kwargs = {"dice": {"allow_blank": True}}
 
+    def validate_roll_modes(self, value):
+        if not isinstance(value, list) or len(value) > 20 or any(
+            not isinstance(mode, str) or mode not in ('normal', 'advantage', 'disadvantage') for mode in value
+        ):
+            raise ValidationError('Режимы бросков: список до 20 значений normal, advantage или disadvantage')
+        return value
+
     def validate(self, data):
         get = lambda k, default=None: data.get(k, getattr(self.instance, k, default))
         if (

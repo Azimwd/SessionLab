@@ -65,3 +65,5 @@
 .sheet-pin-open:hover,.sheet-pin-remove:hover{background:var(--accent-bg);color:var(--accent)}
 .sheet-pin-open:focus-visible,.sheet-pin-remove:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 @media(max-width:500px){.sheet-pin{min-width:0;width:100%}.sheet-pin-open>span{max-width:100%}}
+
+.per-roll-settings{grid-column:1/-1;border:1px solid var(--border);border-radius:10px;padding:14px;margin:4px 0}.per-roll-settings legend{font-size:13px;font-weight:700;padding:0 6px}.per-roll-settings p{font-size:12px}
