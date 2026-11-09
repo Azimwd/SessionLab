@@ -559,6 +559,8 @@ class SceneTarget(Timestamped):
     targetable = models.BooleanField(default=True)
     active = models.BooleanField(default=True)
     linked_sheet = models.BooleanField(default=False)
+    dmhub_game = models.CharField(max_length=128, blank=True, default='')
+    dmhub_token = models.CharField(max_length=128, blank=True, default='')
     scene_number = models.PositiveSmallIntegerField(null=True, blank=True)
     instance = models.OneToOneField(
         Character, on_delete=models.PROTECT, null=True, blank=True, related_name='scene_copy'
@@ -581,6 +583,11 @@ class SceneTarget(Timestamped):
     class Meta:
         constraints = [
             models.CheckConstraint(condition=Q(hp_current__lte=models.F('hp_max')), name='scene_hp_within_max'),
+            models.UniqueConstraint(
+                fields=['session', 'dmhub_game', 'dmhub_token'],
+                condition=Q(active=True) & ~Q(dmhub_token=''),
+                name='active_scene_dmhub_token',
+            ),
             models.UniqueConstraint(fields=['session', 'source'], condition=Q(linked_sheet=True, active=True), name='one_linked_scene_player'),
         ]
 

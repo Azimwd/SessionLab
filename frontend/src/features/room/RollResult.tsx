@@ -24,9 +24,18 @@ export function RollResult({ event, large = false, allowApply = false }: { event
     {p.mechanics_note && <p className="save-callout">{p.recurring && (p.damage || p.parts)?'Бросок для одного срабатывания. ':''}{p.mechanics_note}</p>}
     {event.kind === 'resource' && <p>{p.amount > 0 && <b>{p.amount} · </b>}{p.hp_current===undefined?'Здоровье скрыто':<>Хиты: {p.hp_current}/{p.hp_max}</>}</p>}
     {p.description && <details><summary>Описание действия</summary><p className="preserve-lines">{p.description}</p></details>}
+    {p.token_target && <p className="save-callout">
+      Цель: <b>{p.token_target.name}</b>.{' '}
+      {p.token_target.resolved
+        ? p.token_target.parts.map((part:Json) => part.hit === false ? 'Промах'
+          : part.hit === true ? 'Попадание'
+          : part.save_outcome === 'success' ? 'Спасбросок пройден'
+          : part.save_outcome === 'failure' ? 'Спасбросок провален' : 'Применено').join(' · ')
+        : 'Эффект определяется по описанию.'}
+    </p>}
     {p.adjudication && <p className="save-callout" role="status">{p.adjudication}</p>}
     {p.components && <small>Компоненты: {p.components}</small>}
-    {allowApply && <TargetDamage key={event.id} event={event}/>}
-    {p.kind && <small className="muted">Урон и лечение применяются после решения за столом.</small>}
+    {allowApply && !p.token_target?.resolved && <TargetDamage key={event.id} event={event}/>}
+    {p.kind && !p.token_target?.resolved && <small className="muted">Урон и лечение применяются после решения за столом.</small>}
   </motion.article>;
 }

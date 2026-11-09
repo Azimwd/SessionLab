@@ -21,7 +21,8 @@ export function TargetDamage({event}:{event:Json}) {
   if(!event.id||event.kind!=='ability'||!usable.length)return null;
   const chosenParts=usable.filter(({i})=>(indices??[usable[0].i]).includes(i));
   const attack=!healing&&chosenParts.some(({p})=>!!p.roll);
-  const visibleTargets:Json[]=targets.data?.targets?.filter((t:Json)=>(t.targetable||a.masterMode)&&(!event.payload.effect_target||t.id===event.payload.effect_target))||[];
+  const boundTarget=event.payload.token_target?.id??event.payload.effect_target;
+  const visibleTargets:Json[]=targets.data?.targets?.filter((t:Json)=>(t.targetable||a.masterMode)&&(!boundTarget||t.id===boundTarget))||[];
   const choose=(id:number)=>setSelected(prev=>prev.includes(id)?prev.filter(x=>x!==id):attack?[id]:[...prev,id]);
   const changeParts=(next:number[])=>{
     setIndices(next);

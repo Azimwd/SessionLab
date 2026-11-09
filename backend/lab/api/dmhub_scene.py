@@ -29,6 +29,9 @@ class NativeScene(PersonalSheetAPI):
             if not dm:
                 events = events.filter(actor=user)
             for e in events[:100]:
+                token_target = e.payload.get('token_target', {})
+                if token_target.get('resolved'):
+                    continue
                 parts = []
                 for index, _ in enumerate(e.payload.get('parts') or [e.payload]):
                     try:
@@ -45,7 +48,7 @@ class NativeScene(PersonalSheetAPI):
                     parts.append(item)
                 if parts:
                     sources.append({'id': e.id, 'label': e.payload.get('label', 'Действие'),
-                                    'damage_type': e.payload.get('damage_type', ''), 'effect': effect_kind(e), 'parts': parts, 'effect_target':e.payload.get('effect_target')})
+                                    'damage_type': e.payload.get('damage_type', ''), 'effect': effect_kind(e), 'parts': parts, 'effect_target':token_target.get('id', e.payload.get('effect_target'))})
             history = DamageApplication.objects.filter(target__session=session, status='applied').select_related(
                 'target__source__sheet', 'target__instance__sheet', 'source_event', 'requester').order_by('-id')
             if not dm:

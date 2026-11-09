@@ -218,7 +218,7 @@ class SceneTargetDetail(APIView):
         return mutate(request, c.id, lambda c: update_target(c, request.user, pk, request.data), dm=True)
 
 
-def apply_healing(row, campaign, user, amount):
+def apply_healing(row, campaign, user, amount, *, emit_event=True):
     """Healing ignores damage defenses and temporary HP; saved roll is authoritative."""
     t = row.target
     before, maximum, temporary = hp(t)
@@ -239,16 +239,20 @@ def apply_healing(row, campaign, user, amount):
                       'hp_before': before, 'hp_after': after, 'hp_temp': temporary}
     row.resolved_by = user
     row.save()
-    event(campaign, active_session(campaign), user, None, 'healing', {'label': 'Лечение применено',
-          'target_name': t.name, 'source_event': row.source_event_id},
-          row.source_event.visibility if t.visible else 'dm')
+    if emit_event:
+        event(campaign, active_session(campaign), user, None, 'healing', {'label': 'Лечение применено',
+              'target_name': t.name, 'source_event': row.source_event_id},
+              row.source_event.visibility if t.visible else 'dm')
 
 
-def apply_damage(row, campaign, user, data, privileged=False):
+def apply_damage(row, campaign, user, data, privileged=False, *, emit_event=True):
     """One atomic application. Callers hold the campaign lock via mutate()."""
     if row.status != 'pending':
         raise ValidationError('Этот урон уже применён или отменён')
     t = row.target
+    token_target = row.source_event.payload.get('token_target')
+    if token_target and token_target['id'] != t.id:
+        raise ValidationError('Заклинание направлено на другую цель')
     if row.source_event.payload.get('effect_target') and t.id!=row.source_event.payload['effect_target']:
         raise ValidationError('Этот бросок выполнен по выбранной цели метки')
     if not t.active:
@@ -270,7 +274,7 @@ def apply_damage(row, campaign, user, data, privileged=False):
     if effect_kind(row.source_event) == 'healing':
         if data:
             raise ValidationError('Для лечения не нужны попадание, спасбросок или изменение защиты')
-        apply_healing(row, campaign, user, amount)
+        apply_healing(row, campaign, user, amount, emit_event=emit_event)
         return
     save_roll = None
     outcome = None
@@ -326,9 +330,10 @@ def apply_damage(row, campaign, user, data, privileged=False):
                       'effect_keys': effect_keys, 'components': components}
     row.resolved_by = user
     row.save()
-    event(campaign, active_session(campaign), user, None, 'damage', {'label': 'Урон применён',
-          'target_name': t.name, 'source_event': row.source_event_id},
-          row.source_event.visibility if t.visible else 'dm')
+    if emit_event:
+        event(campaign, active_session(campaign), user, None, 'damage', {'label': 'Урон применён',
+              'target_name': t.name, 'source_event': row.source_event_id},
+              row.source_event.visibility if t.visible else 'dm')
 
 
 def submit_damage(c, user, data):
@@ -367,6 +372,8 @@ def submit_damage_part(c, user, data):
     source = get_object_or_404(RoomEvent, pk=integer(data.get('source_event'), 'Результат броска', 1, 9223372036854775807), campaign=c, session=s, kind='ability')
     if not dm and source.actor_id != user.id:
         raise PermissionDenied('Можно применять только свой результат броска')
+    if source.payload.get('token_target', {}).get('resolved'):
+        raise ValidationError('Результат этого заклинания уже рассчитан')
     index = data.get('part_index', 0)
     part = part_for(source, index)
     ids = data.get('targets')
