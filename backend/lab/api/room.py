@@ -23,6 +23,7 @@ from lab.models import (
     InitiativeTracker,
     Membership,
     RoomEvent,
+    SceneTarget,
 )
 from lab.services.sheets import (
     active_session,
@@ -153,6 +154,29 @@ def room_data(c, user, dm):
             if row['owner'] != user.id or row['kind'] == 'npc':
                 for key in ('hp_current', 'hp_max', 'hp_temp'):
                     row.pop(key, None)
+    table_npcs = npcs
+    if dm and s:
+        templates = {row['id']: row for row in npcs}
+        table_npcs = []
+        targets = SceneTarget.objects.filter(
+            session=s, active=True, source_id__in=templates,
+        ).select_related('source__sheet', 'instance__sheet').order_by('source__name', 'scene_number', 'id')
+        for target in targets:
+            row = {**templates[target.source_id], 'name': target.name,
+                   'scene_target': target.pk, 'scene_version': target.version,
+                   'table_visible': target.visible}
+            if target.uses_sheet:
+                char = target.sheet_character
+                sheet = char.sheet
+                row.update(character_class=char.character_class, level=char.level,
+                           armor_class=sheet.armor_class, speed=sheet.speed,
+                           initiative=computed(sheet)['initiative'], abilities=sheet.abilities,
+                           hp_current=sheet.hp_current, hp_max=sheet.hp_max, hp_temp=sheet.hp_temp,
+                           conditions=sheet.conditions)
+            else:
+                row.update(hp_current=target.hp_current, hp_max=target.hp_max,
+                           hp_temp=target.hp_temp, conditions=target.conditions)
+            table_npcs.append(row)
     tracker = InitiativeTracker.objects.filter(session=s).first() if s else None
     return Response(
         {
@@ -160,6 +184,7 @@ def room_data(c, user, dm):
             "session": {"id": s.id, "name": s.name} if s else None,
             "party": party,
             "npcs": npcs,
+            **({"table_npcs": table_npcs} if dm and s else {}),
             "folders": folders,
             "own_characters": own_characters,
             "table_visible_to_players": c.table_visible_to_players,

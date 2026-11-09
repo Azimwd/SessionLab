@@ -21,7 +21,7 @@ class NativeScene(PersonalSheetAPI):
         session = c.sessions.filter(status='active').first()
         targets, sources, applications = [], [], []
         if session:
-            rows = SceneTarget.objects.filter(session=session, active=True).select_related('source__sheet', 'instance__sheet').order_by('id')
+            rows = SceneTarget.objects.filter(session=session, active=True).select_related('source__sheet', 'instance__sheet').order_by('source_id', 'scene_number', 'id')
             if not dm:
                 rows = rows.filter(visible=True)
             targets = [target_data(t, dm) for t in rows]

@@ -4322,19 +4322,9 @@ blockquote {
 .scene-part-outcomes h4{margin:14px 0 8px}
 
 
-.scene-instance-group { display: grid; gap: 10px; justify-items: start; }
-.scene-instance-panel {
-  display: grid;
-  gap: 14px;
-  margin: 16px 0 24px;
-  padding: clamp(10px, 2vw, 20px);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: var(--surface);
-  min-width: 0;
-}
-.scene-instance-panel > .sheet-tabs {
+.scene-sheet-tabs {
   flex-wrap: nowrap;
   overflow-x: auto;
+  margin: 10px 0;
 }
-.scene-instance-panel > .sheet-tabs button { flex-shrink: 0; }
+.scene-sheet-tabs button { flex-shrink: 0; }

@@ -124,10 +124,10 @@ local function visible(scope,id,value)
  if scope=="folder" then b.folder=id elseif scope=="character" then b.character=id end
  send(b)
 end
-local function characters()
+local function characters(forTable)
  local out={} local d=S.data or {}
  for _,c in ipairs(d.party or {}) do out[#out+1]=c end
- for _,c in ipairs(d.npcs or {}) do out[#out+1]=c end return out
+ for _,c in ipairs((forTable and d.table_npcs) or d.npcs or {}) do out[#out+1]=c end return out
 end
 local function currentText()
  local t=S.data and S.data.initiative or {}
@@ -169,7 +169,7 @@ local function tableUI()
  if d.master_view then rows[#rows+1]=button(d.table_visible_to_players and "Стол виден игрокам · скрыть" or "Стол скрыт · показать",W,function() visible("table",nil,not d.table_visible_to_players) end) end
  for _,f in ipairs(d.folders or {}) do
   local folder=f local key=tostring(f.id) local list={}
-  for _,c in ipairs(characters()) do if tostring(c.folder or "unfiled")==key then list[#list+1]=c end end
+  for _,c in ipairs(characters(true)) do if tostring(c.folder or "unfiled")==key then list[#list+1]=c end end
   local parts={button((S.folders[key] and "+ " or "− ")..f.name.." · "..#list,d.master_view and 416 or W,function() S.folders[key]=not S.folders[key] draw() end,true)}
   if d.master_view then parts[#parts+1]=gap() parts[#parts+1]=button(f.visible_to_players and "Виден" or "Скрыт",136,function() visible("folder",folder.id,not folder.visible_to_players) end) end
   rows[#rows+1]=row(parts)
@@ -185,7 +185,7 @@ local function tableUI()
     for _,a in ipairs({{"str","СИЛ"},{"dex","ЛОВ"},{"con","ТЕЛ"},{"int","ИНТ"},{"wis","МДР"},{"cha","ХАР"}}) do scores[#scores+1]=a[2].." "..fmt((c.abilities or {})[a[1]]) end
     content[#content+1]=label(table.concat(scores,"   ·   "),C,12,"#A0A6B2")
     if #(c.conditions or {})>0 then content[#content+1]=label(table.concat(c.conditions,", "),C,12,"#F0B17C") end
-    if d.master_view then content[#content+1]=button(c.table_visible and "Показан" or "Скрыт",C,function() visible("character",char.id,not char.table_visible) end) end
+    if d.master_view and not c.scene_target then content[#content+1]=button(c.table_visible and "Показан" or "Скрыт",C,function() visible("character",char.id,not char.table_visible) end) end
     rows[#rows+1]=card(content)
    end
   end
@@ -238,7 +238,7 @@ refreshScene=function()
   S.sceneReading=false
   if preview~=S.preview or epoch~=(S.sceneEpoch or 0) then refreshScene() return end
   local hash=fingerprint(d)
-  if S.scene and S.scene.session~=d.session then S.sceneGroup=nil S.sceneEdit=nil S.damageSource=nil resetDamage() end
+  if S.scene and S.scene.session~=d.session then S.sceneEdit=nil S.damageSource=nil resetDamage() end
   S.scene=d
   if hash~=S.sceneHash then S.sceneHash=hash if not S.sceneEdit then draw() end end
  end,function(err) S.sceneReading=false S.scene=nil S.sceneHash=nil status(errorText(err)) draw() end)
@@ -276,15 +276,11 @@ local function sceneEditorUI()
  local e=S.sceneEdit local t=e.target
  local rows={label(t and "Настройки: "..t.name or "Добавить: "..e.source.name,W,20,"#B3A9FF"),input("sceneName",W,"Имя участника")}
  if t then
-  if t.sheet_character then
-   rows[#rows+1]=label("Хиты редактируются в листе экземпляра",W,13,"#A0A6B2")
-  else
-   rows[#rows+1]=label("Текущие / максимальные / временные ХП",W,13,"#A0A6B2")
-   rows[#rows+1]=row({input("sceneHP",180,"ХП"),gap(),input("sceneMax",180,"Максимум"),gap(),input("sceneTemp",184,"Временные ХП")})
-  end
+  rows[#rows+1]=label("Текущие / максимальные / временные ХП",W,13,"#A0A6B2")
+  rows[#rows+1]=row({input("sceneHP",180,"ХП"),gap(),input("sceneMax",180,"Максимум"),gap(),input("sceneTemp",184,"Временные ХП")})
   rows[#rows+1]=button(e.visible and "Виден игрокам" or "Скрыт от игроков",W,function() e.visible=not e.visible draw() end)
   rows[#rows+1]=button(e.targetable and "Можно выбирать целью" or "Нельзя выбирать целью",W,function() e.targetable=not e.targetable draw() end)
-  if t.linked_sheet then rows[#rows+1]=label("ХП связаны с листом игрока",W,13,"#A0A6B2") end
+  if t.linked_sheet or t.sheet_character then rows[#rows+1]=label("ХП связаны с листом",W,13,"#A0A6B2") end
  elseif e.source.kind~="player" then
   rows[#rows+1]=label("Количество отдельных экземпляров NPC · 1…20",W,13,"#A0A6B2")
   rows[#rows+1]=input("sceneCount",W,"Количество NPC")
@@ -296,9 +292,9 @@ local function sceneEditorUI()
   if not name or not name:match("%S") then status("Введите имя участника") return end
   if t then
    local hp,max,temp=tonumber(S.draft.sceneHP),tonumber(S.draft.sceneMax),tonumber(S.draft.sceneTemp)
-   if not t.sheet_character and (not hp or not max or not temp or hp%1~=0 or max%1~=0 or temp%1~=0 or hp<0 or max<1 or hp>max or max>1000000 or temp<0 or temp>1000000) then status("Проверьте ХП: целые числа, текущие не больше максимальных") return end
+   if not hp or not max or not temp or hp%1~=0 or max%1~=0 or temp%1~=0 or hp<0 or max<1 or hp>max or max>1000000 or temp<0 or temp>1000000 then status("Проверьте ХП: целые числа, текущие не больше максимальных") return end
    local body={command="update",target=t.id,version=t.version,name=name,visible=e.visible,targetable=e.targetable,defenses=e.defenses}
-   if not t.sheet_character then body.hp_current=hp body.hp_max=max body.hp_temp=temp end
+   body.hp_current=hp body.hp_max=max body.hp_temp=temp
    sendScene(body)
   else
    local count=e.source.kind=="player" and 1 or tonumber(S.draft.sceneCount)
@@ -345,29 +341,16 @@ local function sceneUI()
   end
   rows[#rows+1]=card(content)
  end
- local groups, order = {}, {}
+ local groups={}
  for _,t in ipairs(d.targets or {}) do
   if d.master_view and t.sheet_character then
-   local source=t.source
-   if not groups[source] then groups[source]={} order[#order+1]=source end
-   local group=groups[source]
-   group[#group+1]=t
-  else
-   appendTarget(t)
+   local group=groups[t.source] or {}
+   group[#group+1]=t.sheet_character
+   groups[t.source]=group
   end
  end
- for _,source in ipairs(order) do
-  local group=groups[source]
-  local opened=S.sceneGroup==source
-  rows[#rows+1]=button((opened and "− " or "+ ")..group[1].source_name.." · "..fmt(#group).." в сцене",W,function()
-   if opened then S.sceneGroup=nil else S.sceneGroup=source end
-   draw()
-  end,true)
-  if opened then
-   local copies={}
-   for _,target in ipairs(group) do copies[#copies+1]=target.sheet_character end
-   for _,target in ipairs(group) do appendTarget(target,copies) end
-  end
+ for _,t in ipairs(d.targets or {}) do
+  appendTarget(t,t.sheet_character and groups[t.source])
  end
  if #(d.targets or {})==0 then rows[#rows+1]=label("В сцене пока нет участников",W,14,"#A0A6B2") end
  return column(rows)

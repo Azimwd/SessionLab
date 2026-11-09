@@ -1,3 +1,4 @@
+from lab.api.scene import target_sheet
 import pytest
 from lab.models import SceneTarget, DamageApplication, RoomEvent
 from lab.services.sheets import sheet_for
@@ -16,7 +17,7 @@ def healing(world, amount=21, alias='лечение'):
 @pytest.mark.parametrize('alias',['healing','heal','лечение','исцеление',' HEALING '])
 def test_healing_caps_at_max_ignores_defenses_and_keeps_temp_hp(world,alias):
     _, ts=targets(world,{'all':'immunity'})
-    t=SceneTarget.objects.get(pk=ts[0]['id']);sh=t.instance.sheet;sh.hp_current=35;sh.hp_temp=8;sh.save()
+    t=SceneTarget.objects.get(pk=ts[0]['id']);sh=target_sheet(t);sh.hp_current=35;sh.hp_temp=8;sh.save()
     e=healing(world,alias=alias)
     r=send(world,e,[t.pk],{})
     assert r.status_code==200,r.content

@@ -210,6 +210,7 @@ local function choose(c, siblings)
   return
  end
  S.sceneSiblings=siblings
+ S.sceneName=siblings and c.name or nil
  if not siblings then
   local history={tonumber(c.id)}
   for _,id in ipairs(S.recent) do if id~=tonumber(c.id) and #history<6 then history[#history+1]=id end end
@@ -246,7 +247,7 @@ local function clearWindowReferences()
 end
 local function clearSceneSelection()
  if not S.sceneSiblings then return end
- S.sceneSiblings=nil S.id=nil S.data=nil S.result=nil S.damageEvent=nil
+ S.sceneSiblings=nil S.sceneName=nil S.id=nil S.data=nil S.result=nil S.damageEvent=nil
 end
 local function closeWindow()
  if S.editor then confirmAction("Закрыть без сохранения?",function() S.editor=nil closeWindow() end) return end
@@ -291,7 +292,7 @@ draw=function(leftOnly)
  local left,right={},{}
  local d=S.data
  local valid=d and d.character and tonumber(d.character.id)==S.id and d.sheet
- local current=valid and d.character.name or "Выбрать персонажа"
+ local current=valid and (S.sceneName or d.character.name) or "Выбрать персонажа"
  left[#left+1]=button(current.."  ›",L,function()
   S.chooser=not S.chooser draw(true)
   if S.chooser then api(base,nil,function(data) S.list=data.characters or {} S.folders=data.folders or {} draw(true) end) end
@@ -493,7 +494,7 @@ draw=function(leftOnly)
    S.rightScroll.children={column(right,R)}
   end
  end
- if S.windowTitle then S.windowTitle.text=valid and d.character.name.." · "..num(d.character.level).." уровень" or "Лист персонажа" end
+ if S.windowTitle then S.windowTitle.text=valid and (S.sceneName or d.character.name).." · "..num(d.character.level).." уровень" or "Лист персонажа" end
  if S.windowStatus then S.windowStatus.text=S.msg end
 end
 openWindow=function()

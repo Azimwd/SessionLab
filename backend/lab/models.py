@@ -559,6 +559,7 @@ class SceneTarget(Timestamped):
     targetable = models.BooleanField(default=True)
     active = models.BooleanField(default=True)
     linked_sheet = models.BooleanField(default=False)
+    scene_number = models.PositiveSmallIntegerField(null=True, blank=True)
     instance = models.OneToOneField(
         Character, on_delete=models.PROTECT, null=True, blank=True, related_name='scene_copy'
     )
@@ -571,7 +572,11 @@ class SceneTarget(Timestamped):
 
     @property
     def uses_sheet(self):
-        return self.linked_sheet or self.instance_id is not None
+        return self.active and (self.linked_sheet or self.instance_id is not None)
+
+    @property
+    def sheet_character(self):
+        return self.instance if self.instance_id else self.source
 
     class Meta:
         constraints = [

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import Scene, { TargetDamage } from './Scene';
+import { MemoryRouter } from 'react-router-dom';
 import ActionList from '../sheets/ActionList';
 import AbilityEditor from '../sheets/AbilityEditor';
 import { AttackEffectsCast } from '../sheets/AttackEffects';
@@ -8,7 +9,6 @@ const mocks=vi.hoisted(()=>({master:false,mutate:vi.fn(),targets:[] as any[],req
 vi.mock('../../app',()=>({useApp:()=>({masterMode:mocks.master,cid:'1',sid:'1',user:{id:1},refresh:vi.fn(),notify:vi.fn()}),
  useData:(path:string)=>{mocks.paths.push(path);return ({data:path.startsWith('/scene/targets/')?{targets:mocks.targets,damage_types:{fire:'Огонь',cold:'Холод'}}:mocks.history??mocks.requests,isPending:false})},
  useAction:()=>({mutate:mocks.mutate,isPending:false,error:null})}));
-vi.mock('../sheets/SheetEditor',()=>({default:({character}:{character:{id:number}})=><p>Открыт лист {character.id}</p>}));
 afterEach(cleanup);
 beforeEach(()=>{mocks.master=false;mocks.mutate.mockReset();mocks.requests=[];mocks.history=null;mocks.paths=[];mocks.targets=[{id:1,name:'Стражник № 1',targetable:true,hp_current:19,hp_max:40,visible:true},{id:2,name:'Стражник № 2',targetable:true,hp_current:40,hp_max:40,visible:true}];});
 it('players see identities without HP or management, even if a cached object contained health',()=>{
@@ -159,23 +159,19 @@ it('can decline a rolled rider on a particular hit without altering damage value
 });
 
 
-it('opens NPC copies under their template and switches between independent sheets',async()=>{
+it('shows NPCs as individual cards and links to their sheet tabs',()=>{
   mocks.master=true;
   mocks.targets=mocks.targets.map(t=>({
-    ...t,source:3,source_name:'Стражник',sheet_character:{id:100+t.id,name:t.name},
+    ...t,source:3,scene_number:t.id,sheet_character:{id:100+t.id,name:t.name},
   }));
-  const {rerender}=render(<Scene characters={[]}/>);
-  expect(screen.getByText('Листов в сцене: 2')).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button',{name:'Открыть листы'}));
-  expect(await screen.findByText('Открыт лист 101')).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button',{name:'Стражник № 2 · 40/40 ХП'}));
-  expect(screen.getByText('Открыт лист 102')).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button',{name:'Убрать из сцены'}));
-  expect(mocks.mutate.mock.calls[0][0]).toMatchObject({
-    path:'/scene/targets/2/?campaign=1',body:{active:false},
-  });
-  mocks.targets=mocks.targets.slice(0,1);
-  rerender(<Scene characters={[]}/>);
-  expect(screen.getByText('Открыт лист 101')).toBeInTheDocument();
-  expect(screen.queryByText('Открыт лист 102')).not.toBeInTheDocument();
+  render(<MemoryRouter><Scene characters={[]}/></MemoryRouter>);
+  expect(screen.getByText('Стражник № 1')).toBeInTheDocument();
+  expect(screen.getByText('Стражник № 2')).toBeInTheDocument();
+  expect(screen.getByText('19/40')).toBeInTheDocument();
+  expect(screen.getByText('40/40')).toBeInTheDocument();
+  const links=screen.getAllByRole('link',{name:'Открыть лист'});
+  expect(links.map(link=>link.getAttribute('href'))).toEqual([
+    '/master/sheets?character=3&target=1',
+    '/master/sheets?character=3&target=2',
+  ]);
 });

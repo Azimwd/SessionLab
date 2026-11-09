@@ -10,6 +10,7 @@ from lab.models import (
     InitiativeEntry,
     InitiativeTracker,
     RoomEvent,
+    SceneTarget,
 )
 
 from .dice import d20, roll_formula
@@ -122,6 +123,12 @@ def active_session(campaign):
 def event(campaign, session, actor, character, kind, payload, visibility="public"):
     if visibility not in ["public", "dm"]:
         raise ValidationError("Неизвестная видимость")
+    name = character.name if character else ""
+    if character and character.kind == 'npc' and session:
+        scene_name = SceneTarget.objects.filter(
+            session=session, source=character, scene_number=1, active=True,
+        ).values_list('name', flat=True).first()
+        name = scene_name or name
     return RoomEvent.objects.create(
         campaign=campaign,
         session=session,
@@ -129,7 +136,7 @@ def event(campaign, session, actor, character, kind, payload, visibility="public
         character=character,
         kind=kind,
         visibility=visibility,
-        payload={"character_name": character.name if character else "", **payload},
+        payload={"character_name": name, **payload},
     )
 
 

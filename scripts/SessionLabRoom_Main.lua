@@ -125,10 +125,10 @@ local function visible(scope,id,value)
  if scope=="folder" then b.folder=id elseif scope=="character" then b.character=id end
  send(b)
 end
-local function characters()
+local function characters(forTable)
  local out={} local d=S.data or {}
  for _,c in ipairs(d.party or {}) do out[#out+1]=c end
- for _,c in ipairs(d.npcs or {}) do out[#out+1]=c end return out
+ for _,c in ipairs((forTable and d.table_npcs) or d.npcs or {}) do out[#out+1]=c end return out
 end
 local function currentText()
  local t=S.data and S.data.initiative or {}
@@ -170,7 +170,7 @@ local function tableUI()
  if d.master_view then rows[#rows+1]=button(d.table_visible_to_players and "\208\161\209\130\208\190\208\187 \208\178\208\184\208\180\208\181\208\189 \208\184\208\179\209\128\208\190\208\186\208\176\208\188 \194\183 \209\129\208\186\209\128\209\139\209\130\209\140" or "\208\161\209\130\208\190\208\187 \209\129\208\186\209\128\209\139\209\130 \194\183 \208\191\208\190\208\186\208\176\208\183\208\176\209\130\209\140",W,function() visible("table",nil,not d.table_visible_to_players) end) end
  for _,f in ipairs(d.folders or {}) do
   local folder=f local key=tostring(f.id) local list={}
-  for _,c in ipairs(characters()) do if tostring(c.folder or "unfiled")==key then list[#list+1]=c end end
+  for _,c in ipairs(characters(true)) do if tostring(c.folder or "unfiled")==key then list[#list+1]=c end end
   local parts={button((S.folders[key] and "+ " or "\226\136\146 ")..f.name.." \194\183 "..#list,d.master_view and 416 or W,function() S.folders[key]=not S.folders[key] draw() end,true)}
   if d.master_view then parts[#parts+1]=gap() parts[#parts+1]=button(f.visible_to_players and "\208\146\208\184\208\180\208\181\208\189" or "\208\161\208\186\209\128\209\139\209\130",136,function() visible("folder",folder.id,not folder.visible_to_players) end) end
   rows[#rows+1]=row(parts)
@@ -186,7 +186,7 @@ local function tableUI()
     for _,a in ipairs({{"str","\208\161\208\152\208\155"},{"dex","\208\155\208\158\208\146"},{"con","\208\162\208\149\208\155"},{"int","\208\152\208\157\208\162"},{"wis","\208\156\208\148\208\160"},{"cha","\208\165\208\144\208\160"}}) do scores[#scores+1]=a[2].." "..fmt((c.abilities or {})[a[1]]) end
     content[#content+1]=label(table.concat(scores,"   \194\183   "),C,12,"#A0A6B2")
     if #(c.conditions or {})>0 then content[#content+1]=label(table.concat(c.conditions,", "),C,12,"#F0B17C") end
-    if d.master_view then content[#content+1]=button(c.table_visible and "\208\159\208\190\208\186\208\176\208\183\208\176\208\189" or "\208\161\208\186\209\128\209\139\209\130",C,function() visible("character",char.id,not char.table_visible) end) end
+    if d.master_view and not c.scene_target then content[#content+1]=button(c.table_visible and "\208\159\208\190\208\186\208\176\208\183\208\176\208\189" or "\208\161\208\186\209\128\209\139\209\130",C,function() visible("character",char.id,not char.table_visible) end) end
     rows[#rows+1]=card(content)
    end
   end
@@ -239,7 +239,7 @@ refreshScene=function()
   S.sceneReading=false
   if preview~=S.preview or epoch~=(S.sceneEpoch or 0) then refreshScene() return end
   local hash=fingerprint(d)
-  if S.scene and S.scene.session~=d.session then S.sceneGroup=nil S.sceneEdit=nil S.damageSource=nil resetDamage() end
+  if S.scene and S.scene.session~=d.session then S.sceneEdit=nil S.damageSource=nil resetDamage() end
   S.scene=d
   if hash~=S.sceneHash then S.sceneHash=hash if not S.sceneEdit then draw() end end
  end,function(err) S.sceneReading=false S.scene=nil S.sceneHash=nil status(errorText(err)) draw() end)
@@ -277,15 +277,11 @@ local function sceneEditorUI()
  local e=S.sceneEdit local t=e.target
  local rows={label(t and "\208\157\208\176\209\129\209\130\209\128\208\190\208\185\208\186\208\184: "..t.name or "\208\148\208\190\208\177\208\176\208\178\208\184\209\130\209\140: "..e.source.name,W,20,"#B3A9FF"),input("sceneName",W,"\208\152\208\188\209\143 \209\131\209\135\208\176\209\129\209\130\208\189\208\184\208\186\208\176")}
  if t then
-  if t.sheet_character then
-   rows[#rows+1]=label("\208\165\208\184\209\130\209\139 \209\128\208\181\208\180\208\176\208\186\209\130\208\184\209\128\209\131\209\142\209\130\209\129\209\143 \208\178 \208\187\208\184\209\129\209\130\208\181 \209\141\208\186\208\183\208\181\208\188\208\191\208\187\209\143\209\128\208\176",W,13,"#A0A6B2")
-  else
-   rows[#rows+1]=label("\208\162\208\181\208\186\209\131\209\137\208\184\208\181 / \208\188\208\176\208\186\209\129\208\184\208\188\208\176\208\187\209\140\208\189\209\139\208\181 / \208\178\209\128\208\181\208\188\208\181\208\189\208\189\209\139\208\181 \208\165\208\159",W,13,"#A0A6B2")
-   rows[#rows+1]=row({input("sceneHP",180,"\208\165\208\159"),gap(),input("sceneMax",180,"\208\156\208\176\208\186\209\129\208\184\208\188\209\131\208\188"),gap(),input("sceneTemp",184,"\208\146\209\128\208\181\208\188\208\181\208\189\208\189\209\139\208\181 \208\165\208\159")})
-  end
+  rows[#rows+1]=label("\208\162\208\181\208\186\209\131\209\137\208\184\208\181 / \208\188\208\176\208\186\209\129\208\184\208\188\208\176\208\187\209\140\208\189\209\139\208\181 / \208\178\209\128\208\181\208\188\208\181\208\189\208\189\209\139\208\181 \208\165\208\159",W,13,"#A0A6B2")
+  rows[#rows+1]=row({input("sceneHP",180,"\208\165\208\159"),gap(),input("sceneMax",180,"\208\156\208\176\208\186\209\129\208\184\208\188\209\131\208\188"),gap(),input("sceneTemp",184,"\208\146\209\128\208\181\208\188\208\181\208\189\208\189\209\139\208\181 \208\165\208\159")})
   rows[#rows+1]=button(e.visible and "\208\146\208\184\208\180\208\181\208\189 \208\184\208\179\209\128\208\190\208\186\208\176\208\188" or "\208\161\208\186\209\128\209\139\209\130 \208\190\209\130 \208\184\208\179\209\128\208\190\208\186\208\190\208\178",W,function() e.visible=not e.visible draw() end)
   rows[#rows+1]=button(e.targetable and "\208\156\208\190\208\182\208\189\208\190 \208\178\209\139\208\177\208\184\209\128\208\176\209\130\209\140 \209\134\208\181\208\187\209\140\209\142" or "\208\157\208\181\208\187\209\140\208\183\209\143 \208\178\209\139\208\177\208\184\209\128\208\176\209\130\209\140 \209\134\208\181\208\187\209\140\209\142",W,function() e.targetable=not e.targetable draw() end)
-  if t.linked_sheet then rows[#rows+1]=label("\208\165\208\159 \209\129\208\178\209\143\208\183\208\176\208\189\209\139 \209\129 \208\187\208\184\209\129\209\130\208\190\208\188 \208\184\208\179\209\128\208\190\208\186\208\176",W,13,"#A0A6B2") end
+  if t.linked_sheet or t.sheet_character then rows[#rows+1]=label("\208\165\208\159 \209\129\208\178\209\143\208\183\208\176\208\189\209\139 \209\129 \208\187\208\184\209\129\209\130\208\190\208\188",W,13,"#A0A6B2") end
  elseif e.source.kind~="player" then
   rows[#rows+1]=label("\208\154\208\190\208\187\208\184\209\135\208\181\209\129\209\130\208\178\208\190 \208\190\209\130\208\180\208\181\208\187\209\140\208\189\209\139\209\133 \209\141\208\186\208\183\208\181\208\188\208\191\208\187\209\143\209\128\208\190\208\178 NPC \194\183 1\226\128\16620",W,13,"#A0A6B2")
   rows[#rows+1]=input("sceneCount",W,"\208\154\208\190\208\187\208\184\209\135\208\181\209\129\209\130\208\178\208\190 NPC")
@@ -297,9 +293,9 @@ local function sceneEditorUI()
   if not name or not name:match("%S") then status("\208\146\208\178\208\181\208\180\208\184\209\130\208\181 \208\184\208\188\209\143 \209\131\209\135\208\176\209\129\209\130\208\189\208\184\208\186\208\176") return end
   if t then
    local hp,max,temp=tonumber(S.draft.sceneHP),tonumber(S.draft.sceneMax),tonumber(S.draft.sceneTemp)
-   if not t.sheet_character and (not hp or not max or not temp or hp%1~=0 or max%1~=0 or temp%1~=0 or hp<0 or max<1 or hp>max or max>1000000 or temp<0 or temp>1000000) then status("\208\159\209\128\208\190\208\178\208\181\209\128\209\140\209\130\208\181 \208\165\208\159: \209\134\208\181\208\187\209\139\208\181 \209\135\208\184\209\129\208\187\208\176, \209\130\208\181\208\186\209\131\209\137\208\184\208\181 \208\189\208\181 \208\177\208\190\208\187\209\140\209\136\208\181 \208\188\208\176\208\186\209\129\208\184\208\188\208\176\208\187\209\140\208\189\209\139\209\133") return end
+   if not hp or not max or not temp or hp%1~=0 or max%1~=0 or temp%1~=0 or hp<0 or max<1 or hp>max or max>1000000 or temp<0 or temp>1000000 then status("\208\159\209\128\208\190\208\178\208\181\209\128\209\140\209\130\208\181 \208\165\208\159: \209\134\208\181\208\187\209\139\208\181 \209\135\208\184\209\129\208\187\208\176, \209\130\208\181\208\186\209\131\209\137\208\184\208\181 \208\189\208\181 \208\177\208\190\208\187\209\140\209\136\208\181 \208\188\208\176\208\186\209\129\208\184\208\188\208\176\208\187\209\140\208\189\209\139\209\133") return end
    local body={command="update",target=t.id,version=t.version,name=name,visible=e.visible,targetable=e.targetable,defenses=e.defenses}
-   if not t.sheet_character then body.hp_current=hp body.hp_max=max body.hp_temp=temp end
+   body.hp_current=hp body.hp_max=max body.hp_temp=temp
    sendScene(body)
   else
    local count=e.source.kind=="player" and 1 or tonumber(S.draft.sceneCount)
@@ -346,29 +342,16 @@ local function sceneUI()
   end
   rows[#rows+1]=card(content)
  end
- local groups, order = {}, {}
+ local groups={}
  for _,t in ipairs(d.targets or {}) do
   if d.master_view and t.sheet_character then
-   local source=t.source
-   if not groups[source] then groups[source]={} order[#order+1]=source end
-   local group=groups[source]
-   group[#group+1]=t
-  else
-   appendTarget(t)
+   local group=groups[t.source] or {}
+   group[#group+1]=t.sheet_character
+   groups[t.source]=group
   end
  end
- for _,source in ipairs(order) do
-  local group=groups[source]
-  local opened=S.sceneGroup==source
-  rows[#rows+1]=button((opened and "\226\136\146 " or "+ ")..group[1].source_name.." \194\183 "..fmt(#group).." \208\178 \209\129\209\134\208\181\208\189\208\181",W,function()
-   if opened then S.sceneGroup=nil else S.sceneGroup=source end
-   draw()
-  end,true)
-  if opened then
-   local copies={}
-   for _,target in ipairs(group) do copies[#copies+1]=target.sheet_character end
-   for _,target in ipairs(group) do appendTarget(target,copies) end
-  end
+ for _,t in ipairs(d.targets or {}) do
+  appendTarget(t,t.sheet_character and groups[t.source])
  end
  if #(d.targets or {})==0 then rows[#rows+1]=label("\208\146 \209\129\209\134\208\181\208\189\208\181 \208\191\208\190\208\186\208\176 \208\189\208\181\209\130 \209\131\209\135\208\176\209\129\209\130\208\189\208\184\208\186\208\190\208\178",W,14,"#A0A6B2") end
  return column(rows)

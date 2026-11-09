@@ -2,6 +2,7 @@ from django.db.models import Q
 from rest_framework.exceptions import ValidationError
 from lab.models import *
 from .casino_math import weighted
+from .scene_instances import retire_scene_npc
 
 
 def snapshot(obj):
@@ -180,6 +181,13 @@ def decide_effect(approval, actor, approved, note):
 def finish_session(session):
     if CasinoRound.objects.filter(session=session, status="active").exists():
         raise ValidationError("Игроки должны завершить открытые карточные раунды")
+    targets = session.scene_targets.filter(active=True, source__kind='npc').select_related(
+        'source__sheet', 'instance__sheet'
+    )
+    for target in targets:
+        retire_scene_npc(target)
+        target.version += 1
+        target.save(update_fields=['active', 'hp_current', 'hp_max', 'hp_temp', 'conditions', 'version', 'updated_at'])
     session.status = "completed"
     session.save()
     EffectApprovalRequest.objects.filter(

@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from lab.models import Character, CharacterSheet, SceneTarget, DamageApplication, RoomEvent
 from lab.services.sheets import active_session, sheet_for, event
-from lab.services.scene_instances import clone_scene_npc
+from lab.services.scene_instances import clone_scene_npc, retire_scene_npc
 from lab.services.dice import d20
 from .common import campaign_for, is_dm, mutate
 from .sheets import require_version
@@ -42,7 +42,7 @@ def defenses(value):
 
 
 def target_sheet(target):
-    character = target.instance if target.instance_id else target.source
+    character = target.sheet_character
     try:
         return character.sheet
     except CharacterSheet.DoesNotExist:
@@ -64,11 +64,12 @@ def target_data(t, dm=False):
         result.update(source=t.source_id, visible=t.visible, active=t.active, linked_sheet=t.linked_sheet,
                       hp_current=current, hp_max=maximum, hp_temp=temporary, defenses=t.defenses,
                       conditions=target_sheet(t).conditions if t.uses_sheet else t.conditions)
-        if t.instance_id:
-            result.update(source_name=t.source.name, sheet_character={
-                'id': t.instance_id, 'name': t.name, 'character_class': t.instance.character_class,
-                'kind': 'npc', 'species': t.instance.species, 'level': t.instance.level,
-                'description': t.instance.description,
+        if t.uses_sheet and t.source.kind == 'npc':
+            char = t.sheet_character
+            result.update(scene_number=t.scene_number, sheet_character={
+                'id': char.pk, 'name': t.name, 'character_class': char.character_class,
+                'kind': 'npc', 'species': char.species, 'level': char.level,
+                'description': char.description,
             })
     return result
 
@@ -115,30 +116,27 @@ def create_targets(c, user, data):
     base = str(data.get('name') or source.name).strip()
     if not base or len(base)>85:
         raise ValidationError('Имя цели: от 1 до 85 символов')
-    # Retired instances stay in history but must not reserve display numbers.
-    # Fill gaps rather than count rows: removing #1 while #2 remains must not
-    # produce a second #2. The campaign lock serializes website/native writes.
-    names = SceneTarget.objects.filter(session=s, source=source, active=True).values_list('name', flat=True)
-    used = set()
-    prefix = f'{base} № '
-    for name in names:
-        suffix = name[len(prefix):] if name.startswith(prefix) else ''
-        if suffix.isdigit():
-            used.add(int(suffix))
-    next_number = 1
+    used = set(SceneTarget.objects.filter(
+        session=s, source=source, active=True, scene_number__isnull=False,
+    ).values_list('scene_number', flat=True))
+    number = 1
     created = []
-    actions = list(source.actions.filter(active=True)) if not linked else []
+    actions = list(source.actions.filter(active=True)) if not linked and (count > 1 or used) else []
     for _ in range(count):
-        while next_number in used:
-            next_number += 1
-        name = base if linked else f'{base} № {next_number}'
-        used.add(next_number)
-        instance = None if linked else clone_scene_npc(
+        while number in used:
+            number += 1
+        name = base if linked else f'{base} № {number}'
+        primary = linked or number == 1
+        instance = None if primary else clone_scene_npc(
             source, sh, actions, name, sh.hp_max, sh.hp_max, 0, []
         )
-        t = SceneTarget.objects.create(session=s, source=source, name=name, linked_sheet=linked,
-            instance=instance, hp_max=sh.hp_max, hp_current=sh.hp_max, defenses=protection)
+        t = SceneTarget.objects.create(
+            session=s, source=source, name=name, linked_sheet=primary, instance=instance,
+            scene_number=None if linked else number, hp_max=sh.hp_max,
+            hp_current=sh.hp_current if primary else sh.hp_max, defenses=protection,
+        )
         created.append(target_data(t, True))
+        used.add(number)
     return {'targets': created}
 
 
@@ -147,10 +145,11 @@ class SceneTargets(APIView):
         c = campaign_for(request)
         dm = is_dm(c, request.user) and request.query_params.get('view') != 'player'
         s = c.sessions.filter(status='active').first()
-        targets = SceneTarget.objects.filter(session=s, active=True).select_related('source__sheet', 'instance__sheet') if s else []
+        targets = SceneTarget.objects.filter(session=s, active=True).select_related('source__sheet', 'instance__sheet').order_by('source_id', 'scene_number', 'id') if s else []
         if not dm and s:
             targets = targets.filter(visible=True)
-        return Response({'targets': [target_data(t, dm) for t in targets], 'damage_types': DAMAGE_TYPES})
+        return Response({'session': s.pk if s else None, 'targets': [target_data(t, dm) for t in targets],
+                         'damage_types': DAMAGE_TYPES})
 
     def post(self, request):
         c = campaign_for(request, dm=True)
@@ -160,7 +159,11 @@ class SceneTargets(APIView):
 def update_target(c, user, pk, data):
     t = get_object_or_404(SceneTarget.objects.select_for_update(), pk=pk, session=active_session(c), source__campaign=c)
     require_version(t, data)
-    for key in ('visible', 'targetable', 'active'):
+    if not t.active:
+        raise ValidationError('Участник уже убран из сцены')
+    if 'active' in data and type(data['active']) is not bool:
+        raise ValidationError('active: boolean')
+    for key in ('visible', 'targetable'):
         if key in data:
             if type(data[key]) is not bool:
                 raise ValidationError(f'{key}: boolean')
@@ -199,6 +202,11 @@ def update_target(c, user, pk, data):
             sh.save()
         else:
             t.hp_max, t.hp_current, t.hp_temp = maximum, current, temp
+    if data.get('active') is False:
+        if t.source.kind == 'npc':
+            retire_scene_npc(t)
+        else:
+            t.active = False
     t.version += 1
     t.save()
     return target_data(t, True)

@@ -1,3 +1,4 @@
+from lab.api.scene import target_sheet
 from unittest.mock import patch
 import pytest
 from lab.models import CharacterAbility, SceneTarget, RoomEvent, DamageApplication, InitiativeTracker, InitiativeEntry
@@ -40,7 +41,7 @@ def test_growth_is_snapshotted_and_critical_adds_upgraded_dice(world,level,dice)
 
 def test_half_health_type_and_independent_defenses_without_hp_leak(world):
     _,ts=targets(world,{'slashing':'resistance','radiant':'immunity','necrotic':'vulnerability'})
-    t=SceneTarget.objects.get(pk=ts[0]['id']);sh=t.instance.sheet;sh.hp_current=10;sh.save()
+    t=SceneTarget.objects.get(pk=ts[0]['id']);sh=target_sheet(t);sh.hp_current=10;sh.save()
     a=attack(world,[effect(below_half_type='necrotic')],dice='10')
     with patch('lab.services.dice.secrets.randbelow',return_value=1):e=cast(world,a)
     # Editing the definition after casting must not change stored components.
@@ -48,7 +49,7 @@ def test_half_health_type_and_independent_defenses_without_hp_leak(world):
     r=apply(world,e,t.pk,0,'typed-effect-once')
     assert r.status_code==200,r.content
     assert apply(world,e,t.pk,key='typed-effect-once').json()==r.json()
-    t.refresh_from_db();assert t.instance.sheet.hp_current==1 # 10/2 + 2*2
+    t.refresh_from_db();assert target_sheet(t).hp_current==1 # 10/2 + 2*2
     resolution=DamageApplication.objects.get(source_event_id=e['id']).resolution
     assert [c['damage_type'] for c in resolution['components']]==['slashing','necrotic']
     assert 'resolution' not in str(r.json()) and 'hp_current' not in str(r.json())
@@ -60,13 +61,13 @@ def test_once_per_turn_shared_across_weapons_and_manual_reset(world):
     with patch('lab.services.dice.secrets.randbelow',return_value=1):first=cast(world,a);second=cast(world,b)
     assert apply(world,first,t).status_code==200
     assert apply(world,second,t).status_code==200
-    assert SceneTarget.objects.get(pk=t).instance.sheet.hp_current==36 # (1+2)+1
+    assert target_sheet(SceneTarget.objects.get(pk=t)).hp_current==36 # (1+2)+1
     sh=sheet_for(world[4])
     reset=post(client(world[1]),scoped(f'/api/characters/{world[4].pk}/resources/',world[3]),{'action':'next_turn','version':sh.version})
     assert reset.status_code==200,reset.content
     with patch('lab.services.dice.secrets.randbelow',return_value=1):third=cast(world,a)
     assert apply(world,third,t).status_code==200
-    assert SceneTarget.objects.get(pk=t).instance.sheet.hp_current==33
+    assert target_sheet(SceneTarget.objects.get(pk=t)).hp_current==33
 
 
 def test_seal_first_attack_and_first_hit_are_independent_and_target_locked(world):
@@ -98,11 +99,11 @@ def test_reduction_cannot_heal_and_effects_can_be_disabled(world):
     a=attack(world,[effect(id='innocent',sign=-1,dice='1d4')])
     with patch('lab.services.dice.secrets.randbelow',return_value=3):first=cast(world,a)
     assert apply(world,first,t).status_code==200
-    assert SceneTarget.objects.get(pk=t).instance.sheet.hp_current==40
+    assert target_sheet(SceneTarget.objects.get(pk=t)).hp_current==40
     no_effects=cast(world,a,{'effects':[]})
     assert 'effects' not in no_effects['payload']
     assert apply(world,no_effects,t).status_code==200
-    assert SceneTarget.objects.get(pk=t).instance.sheet.hp_current==39
+    assert target_sheet(SceneTarget.objects.get(pk=t)).hp_current==39
 
 
 @pytest.mark.parametrize('bad',[[effect(damage_type={})],[effect(frequency=[])],[effect(dice='-1d8')],[effect(dice='99d8')],[effect(scaling=[{'level':0,'dice':'1d4'}])],[effect(enabled='yes')]])
@@ -121,13 +122,13 @@ def test_assessment_choices_are_exclusive_and_unknown_effects_are_rejected(world
 
 def test_exact_half_keeps_original_type_and_multiple_parts_share_first_hit_limit(world):
     _,ts=targets(world,{'radiant':'immunity','necrotic':'vulnerability'})
-    t=SceneTarget.objects.get(pk=ts[0]['id']);sh=t.instance.sheet;sh.hp_current=20;sh.save()
+    t=SceneTarget.objects.get(pk=ts[0]['id']);sh=target_sheet(t);sh.hp_current=20;sh.save()
     a=attack(world,[effect(below_half_type='necrotic')],count=2)
     with patch('lab.services.dice.secrets.randbelow',return_value=1):e=cast(world,a)
     response=post(client(world[1]),scoped('/api/scene/damage/',world[3]),{'source_event':e['id'],'parts':[
         {'part_index':i,'targets':[t.pk],'outcomes':{str(t.pk):{'hit':True}}} for i in [0,1]]})
     assert response.status_code==200,response.content
-    t.refresh_from_db();assert t.instance.sheet.hp_current==18 # first radiant bonus is immune; second is already spent
+    t.refresh_from_db();assert target_sheet(t).hp_current==18 # first radiant bonus is immune; second is already spent
     assert DamageApplication.objects.filter(source_event_id=e['id']).count()==2
 
 
@@ -141,7 +142,7 @@ def test_optional_rider_can_wait_for_later_hit_but_not_be_forged(world):
     r=post(api,url,{'source_event':e['id'],'parts':[
         {'part_index':i,'targets':[t],'outcomes':{str(t):{'hit':True,'effects':[] if i<2 else ['judgment']}}} for i in range(3)]})
     assert r.status_code==200,r.content
-    assert SceneTarget.objects.get(pk=t).instance.sheet.hp_current==35 # 1 + 1 + (1+2)
+    assert target_sheet(SceneTarget.objects.get(pk=t)).hp_current==35 # 1 + 1 + (1+2)
     assert DamageApplication.objects.get(source_event_id=e['id'],part_index=0).resolution['effect_keys']==[]
     assert DamageApplication.objects.get(source_event_id=e['id'],part_index=2).resolution['effect_keys']==['judgment']
 
@@ -154,4 +155,4 @@ def test_native_empty_effect_list_is_normalized_in_nested_outcome(world):
     result=post(api,'/api/integrations/dmhub/scene/commands/',{'command':'damage','session':world[5].pk,
         'source_event':e['id'],'targets':[t],'outcomes':{str(t):{'hit':True,'effects':{}}}})
     assert result.status_code==200,result.content
-    assert SceneTarget.objects.get(pk=t).instance.sheet.hp_current==39
+    assert target_sheet(SceneTarget.objects.get(pk=t)).hp_current==39

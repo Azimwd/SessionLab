@@ -1,6 +1,8 @@
 """Create an independent sheet for one NPC in a scene."""
 from copy import deepcopy
 
+from django.core.exceptions import ObjectDoesNotExist
+
 
 def clone_record(record, excluded, **overrides):
     fields = {
@@ -31,3 +33,25 @@ def clone_scene_npc(source, template, actions, name, maximum, current, temporary
     if copies:
         type(copies[0]).objects.db_manager(using).bulk_create(copies)
     return character
+
+
+def archive_copy(character):
+    """Preserve the identity used by rolls, while deleting the temporary sheet."""
+    character.active = False
+    character.save(update_fields=['active'])
+    character.actions.all().delete()
+    try:
+        sheet = character.sheet
+    except ObjectDoesNotExist:
+        return
+    sheet.delete()
+
+
+def retire_scene_npc(target):
+    if target.uses_sheet:
+        sheet = target.sheet_character.sheet
+        for field in ('hp_current', 'hp_max', 'hp_temp', 'conditions'):
+            setattr(target, field, getattr(sheet, field))
+        if target.instance_id:
+            archive_copy(target.instance)
+    target.active = False

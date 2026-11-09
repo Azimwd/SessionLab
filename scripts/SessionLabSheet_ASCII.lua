@@ -207,6 +207,7 @@ confirmAction("\208\158\209\130\208\188\208\181\208\189\208\184\209\130\209\140 
 return
 end
 S.sceneSiblings=siblings
+S.sceneName=siblings and c.name or nil
 if not siblings then
 local history={tonumber(c.id)}
 for _,id in ipairs(S.recent) do if id~=tonumber(c.id) and #history<6 then history[#history+1]=id end end
@@ -242,7 +243,7 @@ S.typing=false S.selectOpen=nil
 end
 local function clearSceneSelection()
 if not S.sceneSiblings then return end
-S.sceneSiblings=nil S.id=nil S.data=nil S.result=nil S.damageEvent=nil
+S.sceneSiblings=nil S.sceneName=nil S.id=nil S.data=nil S.result=nil S.damageEvent=nil
 end
 local function closeWindow()
 if S.editor then confirmAction("\208\151\208\176\208\186\209\128\209\139\209\130\209\140 \208\177\208\181\208\183 \209\129\208\190\209\133\209\128\208\176\208\189\208\181\208\189\208\184\209\143?",function() S.editor=nil closeWindow() end) return end
@@ -627,7 +628,7 @@ local L,R=P.left-scrollbar,P.right-scrollbar local LI,RI=L-24,R-24
 local left,right={},{}
 local d=S.data
 local valid=d and d.character and tonumber(d.character.id)==S.id and d.sheet
-local current=valid and d.character.name or "\208\146\209\139\208\177\209\128\208\176\209\130\209\140 \208\191\208\181\209\128\209\129\208\190\208\189\208\176\208\182\208\176"
+local current=valid and (S.sceneName or d.character.name) or "\208\146\209\139\208\177\209\128\208\176\209\130\209\140 \208\191\208\181\209\128\209\129\208\190\208\189\208\176\208\182\208\176"
 left[#left+1]=button(current.."  \226\128\186",L,function()
 S.chooser=not S.chooser draw(true)
 if S.chooser then api(base,nil,function(data) S.list=data.characters or {} S.folders=data.folders or {} draw(true) end) end
@@ -827,7 +828,7 @@ S.leftScroll.children={column(left,L)}
 S.rightScroll.children={column(right,R)}
 end
 end
-if S.windowTitle then S.windowTitle.text=valid and d.character.name.." \194\183 "..num(d.character.level).." \209\131\209\128\208\190\208\178\208\181\208\189\209\140" or "\208\155\208\184\209\129\209\130 \208\191\208\181\209\128\209\129\208\190\208\189\208\176\208\182\208\176" end
+if S.windowTitle then S.windowTitle.text=valid and (S.sceneName or d.character.name).." \194\183 "..num(d.character.level).." \209\131\209\128\208\190\208\178\208\181\208\189\209\140" or "\208\155\208\184\209\129\209\130 \208\191\208\181\209\128\209\129\208\190\208\189\208\176\208\182\208\176" end
 if S.windowStatus then S.windowStatus.text=S.msg end
 end
 openWindow=function()

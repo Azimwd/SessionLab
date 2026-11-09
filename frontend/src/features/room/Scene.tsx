@@ -1,10 +1,9 @@
-import { lazy, Suspense, useState } from 'react';
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useApp, useData, useAction } from '../../app';
-import { Badge, Button, Card, Empty, ErrorBox, Field, Loading, Modal } from '../../components/ui';
+import { Badge, Button, Card, Empty, ErrorBox, Field, Modal } from '../../components/ui';
 import type { Json } from '../../api/client';
 import { conditions } from '../sheets/constants';
-
-const SheetEditor = lazy(() => import('../sheets/SheetEditor'));
 
 const defenseNames:Record<string,string>={normal:'Обычный урон',resistance:'Сопротивление — половина',immunity:'Иммунитет — без урона',vulnerability:'Уязвимость — двойной'};
 export function DefenseFields({types,value,onChange}:{types:Json;value:Json;onChange:(v:Json)=>void}) {
@@ -51,15 +50,13 @@ function TargetEditor({target,types,onClose}:{target:Json;types:Json;onClose:()=
   const a=useApp(),action=useAction('Цель обновлена');
   const [draft,setDraft]=useState<Json>({...target});
   const set=(key:string,value:unknown)=>setDraft({...draft,[key]:value});
-  const copy=!!target.sheet_character;
-  return <Modal title={`Настройки: ${target.name}`} onClose={onClose}><form onSubmit={e=>{e.preventDefault();action.mutate({path:`/scene/targets/${target.id}/?campaign=${a.cid}`,method:'PATCH',body:{version:target.version,name:draft.name,visible:draft.visible,targetable:draft.targetable,defenses:draft.defenses,...(!copy?{hp_current:Number(draft.hp_current),hp_max:Number(draft.hp_max),hp_temp:Number(draft.hp_temp),conditions:draft.conditions||[]}:{})}},{onSuccess:onClose});}}>
+  return <Modal title={`Настройки: ${target.name}`} onClose={onClose}><form onSubmit={e=>{e.preventDefault();action.mutate({path:`/scene/targets/${target.id}/?campaign=${a.cid}`,method:'PATCH',body:{version:target.version,name:draft.name,visible:draft.visible,targetable:draft.targetable,defenses:draft.defenses,hp_current:Number(draft.hp_current),hp_max:Number(draft.hp_max),hp_temp:Number(draft.hp_temp),conditions:draft.conditions||[]}},{onSuccess:onClose});}}>
     <Field label="Имя цели"><input value={draft.name} maxLength={100} required onChange={e=>set('name',e.target.value)}/></Field>
-    {!copy&&<div className="scene-defense-grid">{[['hp_current','Текущие ХП'],['hp_max','Максимум ХП'],['hp_temp','Временные ХП']].map(([k,label])=><Field key={k} label={label}><input type="number" min={k==='hp_max'?1:0} max={1000000} value={draft[k]} onChange={e=>set(k,e.target.value)} required/></Field>)}</div>}
+    <div className="scene-defense-grid">{[['hp_current','Текущие ХП'],['hp_max','Максимум ХП'],['hp_temp','Временные ХП']].map(([k,label])=><Field key={k} label={label}><input type="number" min={k==='hp_max'?1:0} max={1000000} value={draft[k]} onChange={e=>set(k,e.target.value)} required/></Field>)}</div>
     <label><input type="checkbox" checked={draft.visible} onChange={e=>set('visible',e.target.checked)}/> Видна игрокам</label><br/>
     <label><input type="checkbox" checked={draft.targetable} onChange={e=>set('targetable',e.target.checked)}/> Игроки могут выбирать целью</label>
-    {target.linked_sheet&&<p className="muted">Это персонаж игрока: ХП синхронизированы с его листом.</p>}
-    {copy&&<p className="muted">Хиты и состояния редактируются в листе экземпляра.</p>}
-    {!copy&&<details><summary>Состояния этого участника</summary><div className="scene-target-picker">{conditions.map(name=><label key={name}><input type="checkbox" checked={(draft.conditions||[]).includes(name)} onChange={e=>set('conditions',e.target.checked?[...(draft.conditions||[]),name]:(draft.conditions||[]).filter((v:string)=>v!==name))}/>{name}</label>)}</div></details>}
+    {(target.linked_sheet||target.sheet_character)&&<p className="muted">Хиты синхронизированы с листом.</p>}
+    <details><summary>Состояния этого участника</summary><div className="scene-target-picker">{conditions.map(name=><label key={name}><input type="checkbox" checked={(draft.conditions||[]).includes(name)} onChange={e=>set('conditions',e.target.checked?[...(draft.conditions||[]),name]:(draft.conditions||[]).filter((v:string)=>v!==name))}/>{name}</label>)}</div></details>
     <DefenseFields types={types} value={draft.defenses} onChange={v=>set('defenses',v)}/>
     {action.error&&<ErrorBox error={action.error}/>}<Button disabled={action.isPending}>Сохранить</Button>
   </form></Modal>;
@@ -96,20 +93,6 @@ export default function Scene({characters}:{characters:Json[]}) {
   const [source,setSource]=useState(''),[count,setCount]=useState(1),[protection,setProtection]=useState<Json>({});
   const selected=characters.find(c=>String(c.id)===source)||characters[0];
   const types=state.data?.damage_types||{};
-  const [openCopy,setOpenCopy]=useState<{source:number; target:number}|null>(null);
-  const groups=new Map<number,Json[]>();
-  const separateTargets:Json[]=[];
-  for (const target of (state.data?.targets||[]) as Json[]) {
-    if (!a.masterMode || !target.sheet_character) {
-      separateTargets.push(target);
-      continue;
-    }
-    const copies=groups.get(target.source);
-    if (copies) copies.push(target);
-    else groups.set(target.source,[target]);
-  }
-  const siblings=openCopy ? groups.get(openCopy.source) : undefined;
-  const selectedCopy=siblings?.find(t=>t.id===openCopy?.target) ?? siblings?.[0];
   const removeTarget=(t:Json)=>action.mutate({
     path:`/scene/targets/${t.id}/?campaign=${a.cid}`, method:'PATCH',
     body:{version:t.version, active:false},
@@ -123,45 +106,16 @@ export default function Scene({characters}:{characters:Json[]}) {
     {a.masterMode&&<>
       <p><b>{t.hp_current}/{t.hp_max}</b> ХП {t.hp_temp>0&&`+ ${t.hp_temp} временных`}</p>
       <div className="actions">
+        {t.sheet_character&&<Link className="button secondary" to={`/master/sheets?character=${t.source}&target=${t.id}`}>Открыть лист</Link>}
         <Button variant="secondary" onClick={()=>setEditing(t)}>Настроить</Button>
         <Button variant="ghost" disabled={action.isPending} onClick={()=>removeTarget(t)}>Убрать</Button>
       </div>
     </>}
   </article>;
 
-  return <Card className="scene-panel"><div className="section-title"><div><div className="eyebrow">УЧАСТНИКИ ТЕКУЩЕЙ СЦЕНЫ</div><h2>Участники сессии</h2><p>{a.masterMode?'Откройте группу NPC, чтобы менять ХП, состояния и атаки конкретного экземпляра.':'Выбирайте цели из результата атаки или заклинания. Здоровье целей видит только мастер.'}</p></div>{a.masterMode&&<Button disabled={!a.sid} onClick={()=>setAdding(true)}>Добавить из листа</Button>}</div>
+  return <Card className="scene-panel"><div className="section-title"><div><div className="eyebrow">УЧАСТНИКИ ТЕКУЩЕЙ СЦЕНЫ</div><h2>Участники сессии</h2><p>{a.masterMode?'Управляйте участниками сцены и открывайте их листы из карточек.':'Выбирайте цели из результата атаки или заклинания. Здоровье целей видит только мастер.'}</p></div>{a.masterMode&&<Button disabled={!a.sid} onClick={()=>setAdding(true)}>Добавить из листа</Button>}</div>
     {state.error&&<ErrorBox error={state.error}/>}{action.error&&<ErrorBox error={action.error}/>}
-    <div className="scene-target-grid">
-      {separateTargets.map(target => targetCard(target))}
-      {[...groups.entries()].map(([id, copies]) => <article className="scene-target-card scene-instance-group" key={`group-${id}`}>
-        <strong>{copies[0].source_name}</strong>
-        <Badge>Листов в сцене: {copies.length}</Badge>
-        <Button variant="secondary" onClick={() => setOpenCopy({source:id, target:copies[0].id})}>
-          Открыть листы
-        </Button>
-      </article>)}
-    </div>
-    {selectedCopy&&<section className="scene-instance-panel" aria-label="Листы экземпляров NPC">
-      <div className="section-title">
-        <h3>{selectedCopy.source_name} · листы в сцене</h3>
-        <Button variant="ghost" onClick={() => setOpenCopy(null)}>Свернуть листы</Button>
-      </div>
-      <div className="sheet-tabs" role="group" aria-label="Экземпляры NPC">
-        {siblings?.map(t => <button key={t.id} type="button"
-          className={t.id===selectedCopy.id?'active':''}
-          aria-pressed={t.id===selectedCopy.id}
-          onClick={() => setOpenCopy({source:t.source, target:t.id})}>
-          {t.name} · {t.hp_current}/{t.hp_max} ХП
-        </button>)}
-      </div>
-      <div className="actions">
-        <Button variant="secondary" onClick={() => setEditing(selectedCopy)}>Настроить цель</Button>
-        <Button variant="ghost" disabled={action.isPending} onClick={() => removeTarget(selectedCopy)}>Убрать из сцены</Button>
-      </div>
-      <Suspense fallback={<Loading/>}>
-        <SheetEditor key={selectedCopy.sheet_character.id} character={selectedCopy.sheet_character}/>
-      </Suspense>
-    </section>}
+    <div className="scene-target-grid">{state.data?.targets?.map(targetCard)}</div>
     {state.data?.targets&&!state.data.targets.length&&<Empty title="В сцене пока нет целей"/>}
     <SceneHistory key={`${a.cid}:${a.sid}:${view}`}/>
     {adding&&<Modal title="Добавить участников сцены" onClose={()=>setAdding(false)}><form onSubmit={e=>{e.preventDefault();action.mutate({path:`/scene/targets/?campaign=${a.cid}`,body:{source:selected?.id,count:selected?.kind==='player'?1:count,defenses:protection}},{onSuccess:()=>{setAdding(false);setProtection({});}});}}><Field label="Лист-шаблон"><select value={selected?.id||''} onChange={e=>setSource(e.target.value)}>{characters.map(c=><option key={c.id} value={c.id}>{c.name} · {c.kind==='npc'?'NPC':'Игрок'}</option>)}</select></Field>{selected?.kind==='npc'&&<Field label="Количество экземпляров"><input type="number" min={1} max={20} value={count} onChange={e=>setCount(Number(e.target.value))}/></Field>}<DefenseFields types={types} value={protection} onChange={setProtection}/>{action.error&&<ErrorBox error={action.error}/>}<Button disabled={action.isPending||!selected}>Добавить в сцену</Button></form></Modal>}
