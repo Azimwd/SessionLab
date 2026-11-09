@@ -61,3 +61,26 @@ test('production frontend serves SPA and forwards session, CSRF, POST and event 
     rmSync(dist, { recursive: true, force: true });
   }
 });
+
+test('closing the browser stream also closes the upstream response', { timeout: 3000 }, async () => {
+  let disconnected;
+  const closed = new Promise(resolve => { disconnected = resolve; });
+  const backend = http.createServer((req, res) => {
+    res.once('close', disconnected);
+    res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+    res.write(': heartbeat\n\n');
+  });
+  const frontend = createApp({ backendUrl: await listen(backend) });
+  try {
+    const origin = await listen(frontend);
+    const controller = new AbortController();
+    const response = await fetch(origin + '/api/stream/', { signal: controller.signal });
+    assert.equal(response.status, 200);
+    controller.abort();
+    await closed;
+  } finally {
+    frontend.closeAllConnections();
+    backend.closeAllConnections();
+    await Promise.all([close(frontend), close(backend)]);
+  }
+});

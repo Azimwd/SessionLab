@@ -36,7 +36,7 @@ class NativeScene(PersonalSheetAPI):
                     except ValidationError:
                         continue
                     # Explicit projection: never send sheet resources or raw event payloads.
-                    item = {'index': index, 'damage': {'total': part['damage']['total']}}
+                    item = {'index': index, 'damage': {'total': part['damage']['total']}, 'effects':part.get('effects',[])}
                     if 'roll' in part:
                         item['roll'] = {'total': part['roll'].get('total')}
                     if 'save' in part:
@@ -45,7 +45,7 @@ class NativeScene(PersonalSheetAPI):
                     parts.append(item)
                 if parts:
                     sources.append({'id': e.id, 'label': e.payload.get('label', 'Действие'),
-                                    'damage_type': e.payload.get('damage_type', ''), 'effect': effect_kind(e), 'parts': parts})
+                                    'damage_type': e.payload.get('damage_type', ''), 'effect': effect_kind(e), 'parts': parts, 'effect_target':e.payload.get('effect_target')})
             history = DamageApplication.objects.filter(target__session=session, status='applied').select_related(
                 'target__source__sheet', 'source_event', 'requester').order_by('-id')
             if not dm:

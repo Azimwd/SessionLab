@@ -55,9 +55,36 @@ it('polls while disconnected and stops polling when the stream recovers', async 
   act(() => Stream.current.onerror?.());
   expect(result.current).toBe('reconnecting');
   await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
-  expect(request).toHaveBeenCalledWith('/room/?campaign=1');
+  expect(request).toHaveBeenCalledWith('/room/?campaign=1', 'GET', undefined, expect.any(AbortSignal));
   expect(qc.getQueryState(['/room/?campaign=1'])?.isInvalidated).toBe(true);
   act(() => Stream.current.onopen?.());
   await act(async () => { await vi.advanceTimersByTimeAsync(10000); });
   expect(request).toHaveBeenCalledTimes(1);
+});
+
+it('stops the stream and aborts polling while hidden, then opens a fresh stream', async () => {
+  vi.useFakeTimers();
+  let hidden = false;
+  const visibility = vi.spyOn(document, 'hidden', 'get').mockImplementation(() => hidden);
+  vi.mocked(request).mockImplementation(() => new Promise(() => {}));
+  try {
+    mount();
+    const old = Stream.current;
+    act(() => old.onerror?.());
+    await act(async () => { await vi.advanceTimersByTimeAsync(10000); });
+    expect(request).toHaveBeenCalledTimes(1);
+    const signal = vi.mocked(request).mock.calls[0][3];
+    hidden = true;
+    act(() => document.dispatchEvent(new Event('visibilitychange')));
+    expect(old.closed).toBe(true);
+    expect(signal?.aborted).toBe(true);
+    act(() => old.onerror?.());
+    await act(async () => { await vi.advanceTimersByTimeAsync(30000); });
+    expect(request).toHaveBeenCalledTimes(1);
+    hidden = false;
+    act(() => document.dispatchEvent(new Event('visibilitychange')));
+    expect(Stream.current).not.toBe(old);
+  } finally {
+    visibility.mockRestore();
+  }
 });

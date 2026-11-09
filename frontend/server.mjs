@@ -49,7 +49,9 @@ export function createApp({ backendUrl, dist = resolve(fileURLToPath(new URL('./
         },
       );
       upstream.on('error', () => { if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('Backend unavailable'); });
-      req.on('aborted', () => upstream.destroy());
+      res.once('close', () => {
+        if (!res.writableFinished) upstream.destroy();
+      });
       req.pipe(upstream);
       return;
     }

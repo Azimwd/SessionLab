@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import Scene, { TargetDamage } from './Scene';
 import ActionList from '../sheets/ActionList';
 import AbilityEditor from '../sheets/AbilityEditor';
+import { AttackEffectsCast } from '../sheets/AttackEffects';
 const mocks=vi.hoisted(()=>({master:false,mutate:vi.fn(),targets:[] as any[],requests:[] as any[],history:null as any,paths:[] as string[]}));
 vi.mock('../../app',()=>({useApp:()=>({masterMode:mocks.master,cid:'1',sid:'1',user:{id:1},refresh:vi.fn(),notify:vi.fn()}),
  useData:(path:string)=>{mocks.paths.push(path);return ({data:path.startsWith('/scene/targets/')?{targets:mocks.targets,damage_types:{fire:'Огонь',cold:'Холод'}}:mocks.history??mocks.requests,isPending:false})},
@@ -128,4 +129,30 @@ it('saves different modes for individual attack rolls in the spell editor',()=>{
  fireEvent.change(screen.getByLabelText('Режим броска 3'),{target:{value:'disadvantage'}});
  fireEvent.submit(screen.getByLabelText('Название').closest('form')!);
  expect(mocks.mutate.mock.calls[0][0].body.roll_modes).toEqual(['advantage','normal','disadvantage']);
+});
+it('adds the Judgment preset and saves level scaling and conditional typed damage',()=>{
+ render(<AbilityEditor characterId={1} kind="attack" spellAbility="str" onClose={()=>{}}/>);
+ fireEvent.change(screen.getByLabelText('Название'),{target:{value:'Меч'}});
+ fireEvent.click(screen.getByRole('button',{name:'Удар Суда'}));
+ fireEvent.submit(screen.getByLabelText('Название').closest('form')!);
+ const rule=mocks.mutate.mock.calls[0][0].body.attack_effects[0];
+ expect(rule).toMatchObject({id:'judgment',frequency:'turn',damage_type:'radiant',below_half_type:'necrotic',critical_upgrade:true});
+ expect(rule.scaling).toEqual([{level:7,dice:'1d10'},{level:10,dice:'1d12'},{level:15,dice:'2d10'}]);
+});
+
+it('a marked effect requires choosing its target before rolling without exposing health',()=>{
+ const confirm=vi.fn();
+ render(<AttackEffectsCast item={{name:'Меч',attack_effects:[{id:'seal',name:'Печать',dice:'1d8',target_required:true,enabled:true}]}} level={10} onClose={()=>{}} onConfirm={confirm}/>);
+ const button=screen.getByRole('button',{name:'Бросить с выбранными эффектами'});
+ expect(button).toBeDisabled();
+ fireEvent.change(screen.getByLabelText('Цель метки'),{target:{value:'2'}});
+ fireEvent.click(button);expect(confirm).toHaveBeenCalledWith(['seal'],2);
+ expect(screen.queryByText('19/40')).not.toBeInTheDocument();
+});
+it('can decline a rolled rider on a particular hit without altering damage values',()=>{
+ render(<TargetDamage event={{id:101,kind:'ability',payload:{damage_type:'slashing',roll:{total:20},damage:{total:10},effects:[{id:'judgment',name:'Удар Суда',roll:{total:7},frequency:'turn'}]}}}/>);
+ fireEvent.click(screen.getByText('Применить к цели'));fireEvent.click(screen.getByLabelText('Стражник № 1'));
+ fireEvent.click(screen.getByLabelText(/Удар Суда · \+7/));
+ fireEvent.click(screen.getByText('Нанести урон (1)'));
+ expect(mocks.mutate.mock.calls[0][0].body.outcomes['1']).toEqual({effects:[],hit:true});
 });

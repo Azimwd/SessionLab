@@ -41,7 +41,7 @@ class SheetSerializer(serializers.ModelSerializer):
     class Meta:
         model = CharacterSheet
         exclude = ["created_at", "updated_at"]
-        read_only_fields = ["id", "character", "version"]
+        read_only_fields = ["id", "character", "version", "combat_turn"]
 
     def get_computed(self, obj) -> dict:
         return computed(obj)
@@ -150,6 +150,10 @@ class AbilitySerializer(serializers.ModelSerializer):
         exclude = ["created_at", "updated_at"]
         read_only_fields = ["id", "character", "version", "catalog_entry", "rules_verified", "rules_recurring", "rules_deferred", "rules_fixed_dc", "rules_possible_saves"]
         extra_kwargs = {"dice": {"allow_blank": True}}
+
+    def validate_attack_effects(self, value):
+        from lab.services.attack_effects import validate_effects
+        return validate_effects(value)
 
     def validate_roll_modes(self, value):
         if not isinstance(value, list) or len(value) > 20 or any(
@@ -272,6 +276,11 @@ class SheetResource(APIView):
                     sheet.death_successes = sheet.death_failures = 0
             elif verb == "temporary":
                 sheet.hp_temp = max(sheet.hp_temp, amount)
+            elif verb == "next_turn":
+                from lab.services.attack_effects import next_turn
+                require_version(sheet, request.data)
+                next_turn(c, sheet)
+                amount = 0
             elif verb == "restore_slots":
                 require_version(sheet, request.data)
                 sheet.slots = {k: {**v, "used": 0} for k, v in sheet.slots.items()}
@@ -293,6 +302,7 @@ class SheetResource(APIView):
                             "heal": "Восстановлены хиты",
                             "temporary": "Временные хиты",
                             "restore_slots": "Восстановлены ячейки",
+                            "next_turn": "Начат новый ход вне инициативы",
                         }[verb],
                         "amount": amount,
                         "hp_current": sheet.hp_current,

@@ -30,6 +30,7 @@ export async function request<T = Json>(
   path: string,
   method = "GET",
   body?: unknown,
+  signal?: AbortSignal,
 ): Promise<T> {
   if (method !== "GET" && !csrf) {
     const r = await fetch("/api/auth/csrf/", { credentials: "include" });
@@ -54,7 +55,9 @@ export async function request<T = Json>(
           : {}),
       },
       body: body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body),
-      signal: AbortSignal.timeout(20000),
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(20000)])
+        : AbortSignal.timeout(20000),
     });
   } catch {
     throw new Error(

@@ -44,14 +44,14 @@ def bridge_payload(request):
         if type(value) is float:
             return bridge_integer(value, 'number')
         if isinstance(value, dict):
-            return {str(k): normalize(v) for k, v in value.items()}
+            return {str(k): [] if k in ('saves','conditions','roll_modes','attack_effects','effects','scaling') and v=={} else normalize(v) for k, v in value.items()}
         if isinstance(value, list):
             return [normalize(v) for v in value]
         return value
     if not isinstance(request.data, dict):
         raise ValidationError('Ожидается JSON-объект')
     data = normalize(request.data)
-    for key in ('saves', 'conditions', 'roll_modes'):
+    for key in ('saves', 'conditions', 'roll_modes', 'attack_effects', 'effects'):
         if data.get(key) == {}:
             data[key] = []
     return data
@@ -232,7 +232,7 @@ class SheetBridgeUse(APIView):
         char = controlled_character(access.campaign, access.user, pk)
         ability = get_object_or_404(char.actions, pk=ability_pk, active=True)
         incoming = bridge_payload(request)
-        data = {k: incoming[k] for k in ('slot_level', 'mode', 'trigger', 'roll_modes') if k in incoming}
+        data = {k: incoming[k] for k in ('slot_level', 'mode', 'trigger', 'roll_modes', 'effects', 'effect_target') if k in incoming}
         if 'slot_level' in data:
             data['slot_level'] = bridge_integer(data['slot_level'], 'slot_level')
         data['visibility'] = 'public'
@@ -251,7 +251,7 @@ class SheetBridgeResource(APIView):
         data = bridge_payload(request)
         action = data.get('action')
         amount = bridge_integer(data.get('amount', 0), 'amount')
-        if action not in ('damage', 'heal', 'temporary', 'restore_slots') or not 0 <= amount <= 10000:
+        if action not in ('damage', 'heal', 'temporary', 'restore_slots', 'next_turn') or not 0 <= amount <= 10000:
             raise ValidationError('Укажите damage, heal или temporary и целое число 0–10000')
 
         def change(campaign, user):
@@ -267,6 +267,10 @@ class SheetBridgeResource(APIView):
                     sheet.death_successes = sheet.death_failures = 0
             elif action == 'temporary':
                 sheet.hp_temp = max(sheet.hp_temp, amount)
+            elif action == 'next_turn':
+                from lab.services.attack_effects import next_turn
+                require_version(sheet, data)
+                next_turn(campaign, sheet)
             else:
                 require_version(sheet, data)
                 sheet.slots = {k: {**v, 'used': 0} for k, v in sheet.slots.items()}
@@ -276,7 +280,7 @@ class SheetBridgeResource(APIView):
             if session:
                 event(campaign, session, user, char, 'resource', {
                     'label': {'damage': 'Получен урон', 'heal': 'Восстановлены хиты',
-                              'temporary': 'Временные хиты', 'restore_slots': 'Восстановлены ячейки'}[action],
+                              'temporary': 'Временные хиты', 'restore_slots': 'Восстановлены ячейки', 'next_turn':'Начат новый ход вне инициативы'}[action],
                     'amount': amount, 'hp_current': sheet.hp_current, 'hp_max': sheet.hp_max,
                 })
             return SheetSerializer(sheet).data

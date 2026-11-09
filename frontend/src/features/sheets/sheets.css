@@ -67,3 +67,7 @@
 @media(max-width:500px){.sheet-pin{min-width:0;width:100%}.sheet-pin-open>span{max-width:100%}}
 
 .per-roll-settings{grid-column:1/-1;border:1px solid var(--border);border-radius:10px;padding:14px;margin:4px 0}.per-roll-settings legend{font-size:13px;font-weight:700;padding:0 6px}.per-roll-settings p{font-size:12px}
+
+.attack-effects-editor{grid-column:1/-1;border:1px solid var(--border);border-radius:12px;padding:14px}.attack-effect-definition{padding:12px;margin-top:10px;border:1px solid var(--border);border-radius:9px}.attack-effect-definition summary{cursor:pointer;font-weight:700}.attack-effect-definition .form-grid{margin-top:12px}.attack-effect-definition .check-line{display:flex;margin:10px 0;gap:8px}.roll-effect-components>div{padding:10px;border:1px solid var(--border);border-radius:8px;margin-top:8px}.roll-effect-components span,.roll-effect-components small{display:block;color:var(--muted);margin-top:4px}
+
+.scene-effect-toggle{display:flex;align-items:center;gap:8px;padding:7px 0;font-size:12px}

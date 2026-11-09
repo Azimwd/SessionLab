@@ -227,15 +227,23 @@ def apply_damage(row, campaign, user, data, privileged=False):
     if row.status != 'pending':
         raise ValidationError('Этот урон уже применён или отменён')
     t = row.target
+    if row.source_event.payload.get('effect_target') and t.id!=row.source_event.payload['effect_target']:
+        raise ValidationError('Этот бросок выполнен по выбранной цели метки')
     if not t.active:
         raise ValidationError('Цель удалена из сцены')
     if not is_dm(campaign, user) and (not t.visible or not t.targetable):
         raise PermissionDenied('Цель недоступна')
     if not isinstance(data, dict):
         raise ValidationError('Исход цели должен быть объектом')
-    if not privileged and set(data) - {'save_outcome', 'hit'}:
+    if not privileged and set(data) - {'save_outcome', 'hit', 'effects'}:
         raise ValidationError('Игрок выбирает только попадание и исход спасброска. Защита задаётся мастером.')
     part = part_for(row.source_event, row.part_index)
+    if 'effects' in data:
+        selected=data['effects']
+        available={e['id'] for e in part.get('effects',[])}
+        if not isinstance(selected,list) or any(not isinstance(k,str) for k in selected) or len(set(selected))!=len(selected) or set(selected)-available:
+            raise ValidationError('Можно выбирать только эффекты из сохранённого броска')
+        part={**part,'effects':[e for e in part.get('effects',[]) if e['id'] in selected]}
     amount = part['damage']['total']
     if effect_kind(row.source_event) == 'healing':
         if data:
@@ -273,7 +281,11 @@ def apply_damage(row, campaign, user, data, privileged=False):
     if not isinstance(defense, str) or defense not in DEFENSES:
         raise ValidationError('Неизвестная защита от урона')
     final = 0 if defense == 'immunity' else amount//2 if defense == 'resistance' else amount*2 if defense == 'vulnerability' else amount
-    before, _, temporary = hp(t)
+    before, maximum, temporary = hp(t)
+    effect_keys, components = [], []
+    if part.get('effects') and data.get('hit') is True:
+        from lab.services.attack_effects import component_damage
+        final,effect_keys,components=component_damage(row,part,amount,damage_type,defense,before,maximum)
     absorbed = min(temporary, final)
     after = max(0, before-(final-absorbed))
     if t.linked_sheet:
@@ -288,7 +300,8 @@ def apply_damage(row, campaign, user, data, privileged=False):
     row.status = 'applied'
     row.resolution = {'base_damage': amount, 'defense': defense, 'final_damage': final,
                       'hp_before': before, 'hp_after': after, 'temp_absorbed': absorbed,
-                      'save_outcome': outcome, 'save_roll': save_roll, 'hit': data.get('hit')}
+                      'save_outcome': outcome, 'save_roll': save_roll, 'hit': data.get('hit'),
+                      'effect_keys': effect_keys, 'components': components}
     row.resolved_by = user
     row.save()
     event(campaign, active_session(campaign), user, None, 'damage', {'label': 'Урон применён',

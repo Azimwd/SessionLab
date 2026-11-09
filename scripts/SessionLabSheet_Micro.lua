@@ -9,7 +9,7 @@ local base="/api/integrations/dmhub/sheets/"
 local attrs={{"str","Сила"},{"dex","Ловкость"},{"con","Тело"},{"int","Интеллект"},{"wis","Мудрость"},{"cha","Харизма"}}
 local skills={{"acrobatics","Акробатика"},{"animal_handling","Животные"},{"arcana","Магия"},{"athletics","Атлетика"},{"deception","Обман"},{"history","История"},{"insight","Проницательность"},{"intimidation","Запугивание"},{"investigation","Анализ"},{"medicine","Медицина"},{"nature","Природа"},{"perception","Внимательность"},{"performance","Выступление"},{"persuasion","Убеждение"},{"religion","Религия"},{"sleight_of_hand","Ловкость рук"},{"stealth","Скрытность"},{"survival","Выживание"}}
 local function text(t) return gui.Label{text=tostring(t or ""),width="100%",height="auto",fontSize=16,color="#F4F5F7"} end
-local function btn(t,f) return gui.Label{text=t,width="100%",height=30,fontSize=16,color="#F4F5F7",bgimage="panels/square.png",bgcolor="#353B50",click=f} end
+local function btn(t,f) return gui.Button{text=t,width="100%",height=32,minHeight=32,maxHeight=32,fontSize=16,color="#F4F5F7",interactable=true,vmargin=2,press=function() f() end} end
 local function signed(n) n=tonumber(n) or 0 return n>=0 and "+"..n or tostring(n) end
 local draw,refresh,startSheet
 local function api(path,body,done)
@@ -23,7 +23,9 @@ local function api(path,body,done)
   if not S.on or run~=S.run then return end
   S.busy=false
   local ok,r=pcall(function() return type(raw)=="table" and raw or json.decode(raw) end)
-  if ok and type(r)=="table" and type(r.data)=="table" then done(r.data)
+  if ok and type(r)=="table" and type(r.data)=="table" then
+   local applied,err=pcall(done,r.data)
+   if not applied then S.data=nil S.msg="Ошибка обработки: "..tostring(err):sub(1,150) draw() end
   else S.msg="Ошибка ответа API: "..tostring(ok and type(r)=="table" and r.error or r):sub(1,120) draw() end
  end
  o.failure=function() if S.on and run==S.run then S.busy=false S.msg="Сеть: проверьте результат на сайте" draw() end end
@@ -39,8 +41,17 @@ end
 refresh=function()
  if not S.on then return end
  if not S.id then
-  api(base,nil,function(d) S.list=d.characters or {} if S.list[1] then S.id=S.list[1].id refresh() else S.msg="Нет листов" draw() end end)
- else api(base..S.id.."/",nil,function(d) S.data=d S.msg="Обновлено" draw() end) end
+  api(base,nil,function(d)
+   S.list=d.characters or {} S.msg="Выберите персонажа" draw()
+   if S.list[1] then S.id=tonumber(S.list[1].id) dmhub.Schedule(0.1,refresh) else S.msg="Нет листов" draw() end
+  end)
+ else
+  local id=S.id
+  api(base..string.format("%d",id).."/",nil,function(d)
+   if S.id~=id then return end
+   S.data=d S.msg="Лист загружен" draw()
+  end)
+ end
 end
 local function act(path,body)
  if S.busy then return end
@@ -70,9 +81,15 @@ draw=function()
  if S.result then r[#r+1]=text(S.result) end
  if S.on then
   r[#r+1]=btn("Обновить",refresh)
-  for _,c in ipairs(S.list or {}) do local id=c.id r[#r+1]=btn((id==S.id and "• " or "")..c.name,function() S.id=id S.data=nil refresh() end) end
+  for _,c in ipairs(S.list or {}) do
+   local id=tonumber(c.id) local name=c.name
+   r[#r+1]=btn((id==S.id and "• " or "")..name,function()
+    S.id=id S.data=nil S.page=1 S.msg="Загрузка: "..name draw()
+    dmhub.Schedule(0.1,refresh)
+   end)
+  end
   local d=S.data
-  if d and d.character and d.character.id==S.id then
+  if d and d.character and tonumber(d.character.id)==S.id then
    local sh=d.sheet local cs=sh.computed
    r[#r+1]=text(d.character.name.." · КД "..sh.armor_class.." · Хиты "..sh.hp_current.."/"..sh.hp_max.." · Врем. "..sh.hp_temp)
    for _,t in ipairs({{"stats","Показатели"},{"skills","Навыки"},{"attack","Атаки"},{"spell","Заклинания"},{"notes","Заметки"}}) do

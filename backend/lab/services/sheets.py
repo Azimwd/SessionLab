@@ -325,12 +325,21 @@ def use_ability(campaign, user, pk, data):
     # Explicit per-roll request > explicit legacy all-roll mode > saved settings.
     if modes is None:
         modes = [data['mode']] * count if 'mode' in data else ability.roll_modes
+    from .attack_effects import select_effects, roll_effects
+    effects, effect_target, effect_turn, first_effects = select_effects(ability,char,session,sheet,data)
+    if effects:
+        payload['effect_turn']=effect_turn
+        payload['advantage_effects']=[f"{key}:{effect_target.pk if effect_target else ''}" for key in first_effects]
+        if effect_target: payload['effect_target']=effect_target.pk
     parts = []
     for index in range(count):
         part = {}
         critical = False
         if payload['resolution'] == "attack":
-            part["roll"] = d20(bonus, modes[index] if index < len(modes) else "normal")
+            mode=modes[index] if index < len(modes) else "normal"
+            if index==0 and first_effects:
+                mode='normal' if mode=='disadvantage' else 'advantage'
+            part["roll"] = d20(bonus, mode)
             critical = part["roll"]["chosen"] == 20
         elif payload['resolution'] == "save":
             part["save"] = {"ability": effective_save, "dc": payload.get('spell_save_dc', 8 + bonus)}
@@ -347,6 +356,9 @@ def use_ability(campaign, user, pk, data):
                 ]
                 part["upcast"] = extras
                 part["damage"]["total"] += sum(r["total"] for r in extras)
+        if effects:
+            part['effects']=roll_effects(effects,char.level,critical)
+            if 'damage' not in part: part['damage']={'total':0,'formula':'0','terms':[],'critical':critical}
         parts.append(part)
     if len(parts) == 1:
         payload.update(parts[0])

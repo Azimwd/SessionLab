@@ -400,7 +400,7 @@ def room_stream(request, pk):
         nonlocal last
         try:
             yield "retry: 1500\n\n"
-            for tick in range(25):
+            for _ in range(13):
                 close_old_connections()
                 if (
                     not Session.objects.filter(
@@ -421,7 +421,7 @@ def room_stream(request, pk):
                     yield f"id: {current}\nevent: change\ndata: {json.dumps({'revision': current})}\n\n"
                 else:
                     yield ": heartbeat\n\n"
-                time.sleep(1)
+                time.sleep(2)
         finally:
             close_old_connections()
 
