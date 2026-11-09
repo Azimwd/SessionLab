@@ -11,10 +11,49 @@ CATALOG_SHAPES = {
     'thunderwave': ('cube', 15),
     'lightning-bolt': ('line', 100),
     'word-of-radiance': ('burst', 5),
+    'cone-of-cold': ('cone', 60),
+    'circle-of-death': ('sphere', 60),
+    'freezing-sphere': ('sphere', 60),
+    'sunburst': ('sphere', 60),
 }
 ICONS = {'auto', 'magic', 'fire', 'frost', 'healing', 'lightning', 'weapon'}
 EFFECTS = {'auto', 'none', 'fire', 'custom'}
-DISTANCE = re.compile(r'^(\d+(?:[.,]\d+)?)\s*(?:фут\w*|фт\.?|ft\.?|feet|foot|(м(?:етр\w*)?|m|met(?:er|re)s?))\s*$', re.I)
+MEASURE = r'(?P<unit>фут\w*|фт\.?|ft\.?|feet|foot|м(?:етр\w*)?|m|met(?:er|re)s?)'
+DISTANCE = re.compile(r'^(?:дальность|дистанция|range)?\s*:?\s*(?P<amount>\d+(?:[.,]\d+)?)\s*' + MEASURE
+                      + r'(?=$|[\s.,;(])', re.I)
+AREA = re.compile(
+    r'\b(?:радиус(?:ом|а)?|radius(?:\s+of)?)\s*:?\s*(?P<amount>\d+(?:[.,]\d+)?)\s*'
+    + MEASURE + r'(?=$|[\s.,;)])', re.I,
+)
+AREA_SHAPE = re.compile(
+    r'\b(?:сфер\w*|круг\w*|взрыв\w*|област\w*|sphere|burst|area)\s+'
+    r'(?:с\s+|with\s+(?:a\s+)?)?' + AREA.pattern, re.I,
+)
+SELF_SHAPE = re.compile(
+    r'(?P<shape>конус\w*|cone|куб\w*|cube|лини\w*|line)\s*(?P<amount>\d+(?:[.,]\d+)?)\s*'
+    + MEASURE + r'(?=$|[\s.,;)])', re.I,
+)
+SPELL_ALIASES = {'огненный шар': 'fireball', 'fireball': 'fireball'}
+
+
+def feet(match):
+    amount = float(match['amount'].replace(',', '.'))
+    unit = match['unit'].casefold()
+    return round(amount * 10 / 3, 6) if unit.startswith(('м', 'm')) else amount
+
+
+def described_area(distance, description, self_origin):
+    if self_origin and (match := SELF_SHAPE.search(distance)):
+        shape = match['shape']
+        if shape.startswith(('конус', 'cone')):
+            return 'cone', feet(match)
+        if shape.startswith(('куб', 'cube')):
+            return 'cube', feet(match)
+        return 'line', feet(match)
+    match = AREA.search(distance) or AREA_SHAPE.search(description)
+    if match:
+        return ('burst' if self_origin else 'sphere'), feet(match)
+    return 'single', 0
 
 
 def validate_map_settings(value):
@@ -45,20 +84,28 @@ def validate_map_settings(value):
 
 def map_targeting(ability):
     settings = ability.map_settings
-    code = ability.catalog_entry.code if ability.catalog_entry_id else ''
-    shape, size = CATALOG_SHAPES.get(code, ('single', 0))
-    shape = settings.get('shape', shape)
-    size = settings.get('size_ft', size)
+    code = ability.catalog_entry.code.removeprefix('srd51-') if ability.catalog_entry_id else ''
+    if not code and ability.kind == 'spell':
+        code = SPELL_ALIASES.get(ability.name.strip().casefold(), '')
     distance = ability.range.strip().lower()
-    match = DISTANCE.fullmatch(distance)
-    distance_ft = None
-    if match:
-        number = float(match[1].replace(',', '.'))
-        distance_ft = number * 10 / 3 if match[2] else number
+    self_origin = distance.startswith(('на себя', 'self'))
+    if match := DISTANCE.match(distance):
+        distance_ft = feet(match)
     elif distance.startswith(('касание', 'touch')):
         distance_ft = 5
-    elif distance.startswith(('на себя', 'self')):
+    elif self_origin:
         distance_ft = 0
+    else:
+        distance_ft = 150 if code == 'fireball' and not distance else None
+    if 'shape' in settings:
+        shape, size = settings['shape'], settings.get('size_ft', 0)
+    elif ability.kind == 'spell' and ability.resolution != 'attack':
+        shape, size = CATALOG_SHAPES.get(code) or described_area(
+            distance, ability.description.casefold(), self_origin)
+    else:
+        shape, size = 'single', 0
+    if shape != 'single' and not 0 < size <= 150:
+        shape, size = 'single', 0
     return {
         'shape': shape, 'size_ft': size if shape != 'single' else 0,
         'range_ft': settings.get('range_ft', distance_ft),

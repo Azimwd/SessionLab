@@ -84,6 +84,8 @@ def cast_spell(campaign, user, session, master, game, data):
         CharacterAbility, pk=integer(data.get('spell'), 'Заклинание', 1, 2**63-1),
         character=caster, kind='spell', active=True,
     )
+    if map_targeting(spell)['shape'] != 'single':
+        raise ValidationError('Для этого заклинания выберите область на карте в обновлённом моде.')
     return resolve_action(campaign, user, spell, data.get('slot_level'), [target], master, game, legacy=True)
 
 
@@ -111,8 +113,11 @@ def act_on_map(campaign, user, session, master, game, data):
         if distance > rules['range_ft']:
             raise ValidationError('Цель за пределами дальности')
     chosen = data.get('targets')
-    if chosen == {}:  # Lua can serialize an empty array as an object.
-        chosen = []
+    if isinstance(chosen, dict) and len(chosen) <= 50:
+        # Some Lua encoders use a numbered object for a sequence, including {} for an empty one.
+        indexes = [str(i) for i in range(1, len(chosen) + 1)]
+        if set(chosen) == set(indexes):
+            chosen = [chosen[i] for i in indexes]
     if not isinstance(chosen, list) or not (0 if area else 1) <= len(chosen) <= (50 if area else 1):
         raise ValidationError('Некорректное количество целей')
     target_tokens = {}
