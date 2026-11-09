@@ -498,6 +498,7 @@ class CharacterAbility(Timestamped):
     ])
     casting_time = models.CharField(max_length=255, default="1 действие")
     range = models.CharField(max_length=80, blank=True)
+    map_settings = models.JSONField(default=dict, blank=True)
     duration = models.CharField(max_length=80, blank=True)
     concentration = models.BooleanField(default=False)
     active = models.BooleanField(default=True)

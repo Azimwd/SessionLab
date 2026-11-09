@@ -124,11 +124,20 @@ class SheetSerializer(serializers.ModelSerializer):
 
 
 class AbilitySerializer(serializers.ModelSerializer):
+    map_targeting = serializers.SerializerMethodField()
     rules_verified = serializers.SerializerMethodField()
     rules_recurring = serializers.SerializerMethodField()
     rules_deferred = serializers.SerializerMethodField()
     rules_fixed_dc = serializers.SerializerMethodField()
     rules_possible_saves = serializers.SerializerMethodField()
+
+    def get_map_targeting(self, obj) -> dict:
+        from lab.services.map_actions import map_targeting
+        return map_targeting(obj)
+
+    def validate_map_settings(self, value):
+        from lab.services.map_actions import validate_map_settings
+        return validate_map_settings(value)
 
     def get_rules_verified(self, obj) -> bool | None:
         return bool(obj.catalog_entry.template.get('verified')) if obj.catalog_entry_id else None
@@ -148,7 +157,7 @@ class AbilitySerializer(serializers.ModelSerializer):
     class Meta:
         model = CharacterAbility
         exclude = ["created_at", "updated_at"]
-        read_only_fields = ["id", "character", "version", "catalog_entry", "rules_verified", "rules_recurring", "rules_deferred", "rules_fixed_dc", "rules_possible_saves"]
+        read_only_fields = ["id", "character", "version", "catalog_entry", "map_targeting", "rules_verified", "rules_recurring", "rules_deferred", "rules_fixed_dc", "rules_possible_saves"]
         extra_kwargs = {"dice": {"allow_blank": True}}
 
     def validate_attack_effects(self, value):
@@ -183,6 +192,8 @@ class AbilitySerializer(serializers.ModelSerializer):
             raise ValidationError("Количество бросков: 1–20; добавочные броски: 0–5")
         if len(get("description", "")) > 10000:
             raise ValidationError("Описание слишком длинное")
+        if get('resolution') == 'attack' and get('map_settings', {}).get('shape', 'single') != 'single':
+            raise ValidationError('Для области выберите спасбросок или автоматическое применение.')
         # An explicit stat from older editors remains a per-spell override.
         if 'ability' in data and 'use_spell_ability' not in data:
             data['use_spell_ability'] = False

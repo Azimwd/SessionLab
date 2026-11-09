@@ -11,6 +11,8 @@ function detail(roll: Json) {
 }
 export function RollResult({ event, large = false, allowApply = false }: { event: Json; large?: boolean; allowApply?: boolean }) {
   const p = event.payload;
+  const targets = p.token_targets ?? (p.token_target ? [p.token_target] : []);
+  const resolved = p.map_resolved || p.token_target?.resolved;
   return <motion.article layout initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} className={`roll-result ${large ? 'large' : ''}`}>
     <div className="roll-event-title"><span className="roll-symbol"><Dice5 size={20}/></span><div><strong>{p.label}</strong><small>{p.character_name || event.actor_name} · {new Date(event.created_at).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}</small></div>{event.visibility === 'dm' && <Badge><EyeOff size={12}/> Мастеру</Badge>}</div>
     {p.parts && <div className="multi-rolls">{p.parts.map((part:Json,i:number)=><RollResult allowApply={false} key={i} event={{...event,payload:{...part,label:`Бросок ${i+1}`,character_name:p.character_name,damage_type:p.damage_type}}}/>)}<p><b>{p.parts.some((part:Json)=>part.effects?.length)?'Сумма основного урона':'Сумма результатов'}: {p.total_damage}</b> · учитывайте попадание каждого броска.</p></div>}
@@ -24,18 +26,19 @@ export function RollResult({ event, large = false, allowApply = false }: { event
     {p.mechanics_note && <p className="save-callout">{p.recurring && (p.damage || p.parts)?'Бросок для одного срабатывания. ':''}{p.mechanics_note}</p>}
     {event.kind === 'resource' && <p>{p.amount > 0 && <b>{p.amount} · </b>}{p.hp_current===undefined?'Здоровье скрыто':<>Хиты: {p.hp_current}/{p.hp_max}</>}</p>}
     {p.description && <details><summary>Описание действия</summary><p className="preserve-lines">{p.description}</p></details>}
-    {p.token_target && <p className="save-callout">
-      Цель: <b>{p.token_target.name}</b>.{' '}
-      {p.token_target.resolved
-        ? p.token_target.parts.map((part:Json) => part.hit === false ? 'Промах'
+    {targets.map((target:Json) => <p key={target.id} className="save-callout">
+      Цель: <b>{target.name}</b>.{' '}
+      {target.resolved
+        ? target.parts.map((part:Json) => part.hit === false ? 'Промах'
           : part.hit === true ? 'Попадание'
           : part.save_outcome === 'success' ? 'Спасбросок пройден'
           : part.save_outcome === 'failure' ? 'Спасбросок провален' : 'Применено').join(' · ')
         : 'Эффект определяется по описанию.'}
-    </p>}
+    </p>)}
+    {p.map_resolved && !targets.length && <p className="save-callout">В области нет привязанных целей.</p>}
     {p.adjudication && <p className="save-callout" role="status">{p.adjudication}</p>}
     {p.components && <small>Компоненты: {p.components}</small>}
-    {allowApply && !p.token_target?.resolved && <TargetDamage key={event.id} event={event}/>}
-    {p.kind && !p.token_target?.resolved && <small className="muted">Урон и лечение применяются после решения за столом.</small>}
+    {allowApply && !resolved && <TargetDamage key={event.id} event={event}/>}
+    {p.kind && !resolved && <small className="muted">Урон и лечение применяются после решения за столом.</small>}
   </motion.article>;
 }

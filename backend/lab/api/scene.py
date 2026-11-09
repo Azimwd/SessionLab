@@ -372,7 +372,7 @@ def submit_damage_part(c, user, data):
     source = get_object_or_404(RoomEvent, pk=integer(data.get('source_event'), 'Результат броска', 1, 9223372036854775807), campaign=c, session=s, kind='ability')
     if not dm and source.actor_id != user.id:
         raise PermissionDenied('Можно применять только свой результат броска')
-    if source.payload.get('token_target', {}).get('resolved'):
+    if source.payload.get('map_resolved') or source.payload.get('token_target', {}).get('resolved'):
         raise ValidationError('Результат этого заклинания уже рассчитан')
     index = data.get('part_index', 0)
     part = part_for(source, index)

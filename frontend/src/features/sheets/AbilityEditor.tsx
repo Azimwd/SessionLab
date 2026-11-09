@@ -11,7 +11,7 @@ export default function AbilityEditor({characterId, initial, kind, onClose, spel
   const set=(key:string,value:unknown)=>setV(old=>({...old,[key]:value}));
   return <Modal wide title={initial?'Редактировать действие':kind==='spell'?'Новое заклинание':'Новая атака'} onClose={onClose}><form onSubmit={e=>{e.preventDefault();action.mutate({path:initial?`/abilities/${initial.id}/?campaign=${a.cid}`:`/characters/${characterId}/abilities/?campaign=${a.cid}`,method:initial?'PATCH':'POST',body:v},{onSuccess:onClose});}}>
     <div className="form-grid"><Field label="Название"><input required maxLength={100} value={v.name} onChange={e=>set('name',e.target.value)}/></Field>{kind==='spell'&&<Field label="Источник магической характеристики"><select value={v.use_spell_ability?'sheet':'custom'} onChange={e=>set('use_spell_ability',e.target.value==='sheet')}><option value="sheet">Основная характеристика магии из листа</option><option value="custom">Отдельная для этого заклинания</option></select></Field>}<Field label="Характеристика"><select disabled={kind==='spell'&&v.use_spell_ability} value={kind==='spell'&&v.use_spell_ability?spellAbility:v.ability} onChange={e=>set('ability',e.target.value)}>{Object.entries(abilities).map(([k,n])=><option key={k} value={k}>{n}</option>)}</select></Field>
-    <Field label="Как применяется"><select value={v.resolution} onChange={e=>set('resolution',e.target.value)}><option value="attack">Бросок атаки</option><option value="save">Спасбросок цели</option><option value="automatic">Автоматически / без атаки</option></select></Field><Field label="Дополнительный бонус" hint="К атаке или сложности спасброска"><input type="number" min={-30} max={30} required value={v.bonus} onChange={e=>set('bonus',Number(e.target.value))}/></Field>
+    <Field label="Как применяется"><select value={v.resolution} onChange={e=>setV(old=>({...old,resolution:e.target.value,...(e.target.value==='attack'&&old.map_settings?.shape&&old.map_settings.shape!=='single'?{map_settings:{...old.map_settings,shape:'single'}}:{})}))}><option value="attack">Бросок атаки</option><option value="save">Спасбросок цели</option><option value="automatic">Автоматически / без атаки</option></select></Field><Field label="Дополнительный бонус" hint="К атаке или сложности спасброска"><input type="number" min={-30} max={30} required value={v.bonus} onChange={e=>set('bonus',Number(e.target.value))}/></Field>
     <Field label="Кубики урона / лечения" hint="Например 2d6+3. Оставьте пустым, если кубики не нужны."><input maxLength={80} value={v.dice} onChange={e=>set('dice',e.target.value)}/></Field><Field label="Эффект"><select value={['healing','heal','лечение','исцеление'].includes(String(v.damage_type).trim().toLowerCase())?'healing':'damage'} onChange={e=>setV(old=>({...old,damage_type:e.target.value==='healing'?'лечение':'',...(e.target.value==='healing'?{resolution:'automatic'}:{})}))}><option value="damage">Нанесение урона</option><option value="healing">Восстановление ХП</option></select></Field><Field label="Тип результата"><input maxLength={50} placeholder="Огонь, рубящий, лечение…" value={v.damage_type} onChange={e=>set('damage_type',e.target.value)}/></Field>
     {v.resolution==='save' && <Field label="Спасбросок цели"><select value={v.save_ability} onChange={e=>set('save_ability',e.target.value)}>{Object.entries(abilities).map(([k,n])=><option key={k} value={k}>{n}</option>)}</select></Field>}
     {v.resolution==='save'&&<Field label="Урон при успешном спасброске" hint="При провале — весь выпавший урон. Половина округляется вниз."><select aria-label="Урон при успешном спасброске" value={v.save_success||'rules'} onChange={e=>set('save_success',e.target.value)}><option value="rules">По правилам каталога (для своего — 0)</option><option value="none">Нет урона</option><option value="half">Половина урона</option><option value="full">Полный урон</option></select></Field>}
@@ -21,6 +21,47 @@ export default function AbilityEditor({characterId, initial, kind, onClose, spel
     {kind==='spell' && (v.level===0?v.cantrip_scaling:v.upcast_allowed) && <Field label={v.level===0?'Доп. броски на уровнях 5, 11, 17':'Доп. броски за уровень ячейки'} hint={v.level===0?'Например +1 луч для «Потустороннего разряда»':'Например +1 луч за каждую более высокую ячейку'}><input type="number" required min={0} max={5} value={v.upcast_count} onChange={e=>set('upcast_count',Number(e.target.value))}/></Field>}
     {v.resolution==='attack'&&<AttackEffectsEditor value={v.attack_effects||[]} onChange={value=>set('attack_effects',value)}/>}
     <Field label="Время применения"><input maxLength={80} value={v.casting_time} onChange={e=>set('casting_time',e.target.value)}/></Field><Field label="Дальность"><input maxLength={80} placeholder="5 футов / 60 футов / касание" value={v.range} onChange={e=>set('range',e.target.value)}/></Field></div>
+    <fieldset className="per-roll-settings">
+      <legend>Карта и оформление DMHub</legend>
+      <div className="form-grid">
+        <Field label="Дальность на карте, футы" hint="Пусто — взять дальность из текста. 0 — на себя или от себя.">
+          <input type="number" min={0} max={10000} placeholder={v.map_targeting?.range_ft ?? ''} value={v.map_settings?.range_ft ?? ''} onChange={e=>{
+            const {range_ft, ...settings}=v.map_settings||{};
+            set('map_settings', e.target.value===''?settings:{...settings,range_ft:Number(e.target.value)});
+          }}/>
+        </Field>
+        {v.resolution!=='attack' && <Field label="Форма области">
+          <select value={v.map_settings?.shape || v.map_targeting?.shape || 'single'} onChange={e=>{
+            const shape=e.target.value;
+            set('map_settings',{...v.map_settings,shape,...(shape!=='single'?{size_ft:v.map_settings?.size_ft||v.map_targeting?.size_ft||15}:{})});
+          }}>
+            <option value="single">Одна цель</option><option value="sphere">Сфера вокруг выбранной клетки</option>
+            <option value="burst">Радиус вокруг заклинателя</option><option value="cone">Конус от заклинателя</option>
+            <option value="cube">Куб</option><option value="line">Линия от заклинателя</option>
+          </select>
+        </Field>}
+        {v.resolution!=='attack' && (v.map_settings?.shape || v.map_targeting?.shape || 'single')!=='single' && <Field label="Размер области, футы" hint="Радиус сферы, длина конуса или линии, сторона куба. Линия занимает одну клетку в ширину.">
+          <input type="number" min={1} max={150} required value={v.map_settings?.size_ft ?? v.map_targeting?.size_ft ?? 15} onChange={e=>set('map_settings',{...v.map_settings,shape:v.map_settings?.shape||v.map_targeting?.shape,size_ft:Number(e.target.value)})}/>
+        </Field>}
+        <Field label="Иконка действия">
+          <select value={v.map_settings?.icon||'auto'} onChange={e=>set('map_settings',{...v.map_settings,icon:e.target.value})}>
+            <option value="auto">По типу действия</option><option value="magic">Магия</option><option value="fire">Огонь</option>
+            <option value="frost">Холод</option><option value="healing">Лечение</option><option value="lightning">Молния</option><option value="weapon">Оружие</option>
+          </select>
+        </Field>
+        <Field label="Своя иконка DMHub" hint="Ключ изображения или путь к PNG в game-icons / ui-icons.">
+          <input value={v.map_settings?.icon_asset||''} maxLength={160} onChange={e=>set('map_settings',{...v.map_settings,icon_asset:e.target.value.trim()})}/>
+        </Field>
+        <Field label="Визуальный эффект">
+          <select value={v.map_settings?.effect||'auto'} onChange={e=>set('map_settings',{...v.map_settings,effect:e.target.value})}>
+            <option value="auto">По типу действия</option><option value="none">Выключен</option><option value="fire">Огонь</option><option value="custom">Свой эффект DMHub</option>
+          </select>
+        </Field>
+        {v.map_settings?.effect==='custom' && <Field label="Имя эффекта в DMHub">
+          <input required maxLength={120} value={v.map_settings?.effect_asset||''} onChange={e=>set('map_settings',{...v.map_settings,effect_asset:e.target.value})}/>
+        </Field>}
+      </div>
+    </fieldset>
     <div className="check-options">{kind==='spell' && v.level>0 && <label className="check-line"><input type="checkbox" checked={v.upcast_allowed} onChange={e=>setV(old=>({...old,upcast_allowed:e.target.checked,upcast_dice:e.target.checked?old.upcast_dice:'',upcast_count:e.target.checked?old.upcast_count:0}))}/>Разрешить повышенную ячейку по правилам заклинания</label>}<label className="check-line"><input type="checkbox" checked={v.proficient} onChange={e=>set('proficient',e.target.checked)}/>Добавлять бонус мастерства</label><label className="check-line"><input type="checkbox" checked={v.add_modifier} onChange={e=>set('add_modifier',e.target.checked)}/>Добавлять модификатор характеристики к урону / лечению</label>{kind==='spell' && <label className="check-line"><input type="checkbox" checked={v.concentration} onChange={e=>set('concentration',e.target.checked)}/>Требует концентрации</label>}</div>
     {kind==='spell' && v.level===0 && <label className="check-line"><input type="checkbox" checked={v.cantrip_scaling} onChange={e=>set('cantrip_scaling',e.target.checked)}/>Усиливать заговор на уровнях персонажа 5, 11, 17 (дополнительные кубики / броски выше)</label>}
     <Field label="Описание, компоненты и особые правила"><textarea rows={4} maxLength={10000} value={v.description} onChange={e=>set('description',e.target.value)}/></Field>

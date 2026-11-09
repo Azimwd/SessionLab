@@ -1,4 +1,4 @@
-"""Map token bindings and authoritative, single-target DMHub spells."""
+"""Map bindings and transactional DMHub action resolution."""
 
 import re
 
@@ -9,7 +9,9 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
 from lab.models import CharacterAbility, DamageApplication, SceneTarget
-from lab.services.sheets import active_session, controlled_character, use_ability
+from lab.services.dice import d20
+from lab.services.map_actions import map_targeting
+from lab.services.sheets import active_session, computed, controlled_character, use_ability
 
 from .common import is_dm
 from .dmhub_edit import PersonalSheetAPI
@@ -82,43 +84,116 @@ def cast_spell(campaign, user, session, master, game, data):
         CharacterAbility, pk=integer(data.get('spell'), 'Заклинание', 1, 2**63-1),
         character=caster, kind='spell', active=True,
     )
-    roll = use_ability(campaign, user, spell.pk, {
-        'slot_level': integer(data.get('slot_level'), 'Уровень ячейки', 0, 9),
-        'effect_target': target.pk,
-        'visibility': 'public' if target.visible else 'dm',
-    })
-    summary = {'id': target.pk, 'name': target.name, 'resolved': False, 'parts': []}
-    roll.payload['token_target'] = summary
+    return resolve_action(campaign, user, spell, data.get('slot_level'), [target], master, game, legacy=True)
+
+
+def act_on_map(campaign, user, session, master, game, data):
+    if set(data) - {
+        'command', 'session', 'game', 'caster', 'action', 'action_version',
+        'slot_level', 'distance_ft', 'targets',
+    }:
+        raise ValidationError('Исход и величину урона рассчитывает SessionLab')
+    caster = controlled_character(campaign, user, data.get('caster'))
+    action = get_object_or_404(
+        CharacterAbility.objects.select_related('catalog_entry'),
+        pk=integer(data.get('action'), 'Действие', 1, 2**63-1),
+        character=caster, active=True, kind__in=('attack', 'spell'),
+    )
+    if data.get('action_version') != action.version:
+        raise ValidationError('Действие изменилось. Откройте его заново.')
+    rules = map_targeting(action)
+    area = rules['shape'] != 'single'
+    if area and action.resolution == 'attack':
+        raise ValidationError('Для области выберите спасбросок или автоматическое применение')
+    distance = data.get('distance_ft')
+    if rules['range_ft'] is not None:
+        integer(distance, 'Расстояние в футах', 0, 100000)
+        if distance > rules['range_ft']:
+            raise ValidationError('Цель за пределами дальности')
+    chosen = data.get('targets')
+    if chosen == {}:  # Lua can serialize an empty array as an object.
+        chosen = []
+    if not isinstance(chosen, list) or not (0 if area else 1) <= len(chosen) <= (50 if area else 1):
+        raise ValidationError('Некорректное количество целей')
+    target_tokens = {}
+    for row in chosen:
+        if not isinstance(row, dict) or set(row) != {'id', 'token'}:
+            raise ValidationError('Некорректная цель')
+        pk = integer(row['id'], 'Цель', 1, 2**63-1)
+        if pk in target_tokens:
+            raise ValidationError('Цели не должны повторяться')
+        target_tokens[pk] = identifier(row['token'], 'токен цели')
+    targets = rows_for(session).filter(pk__in=target_tokens, dmhub_game=game)
+    if not master:
+        targets = targets.filter(visible=True, targetable=True)
+    targets = list(targets.order_by('pk'))
+    if len(targets) != len(target_tokens) or any(
+        target.dmhub_token != target_tokens[target.pk] or not target.uses_sheet
+        for target in targets
+    ):
+        raise ValidationError('Одна из целей больше недоступна. Выберите область заново.')
+    return resolve_action(campaign, user, action, data.get('slot_level'), targets, master, game, area=area)
+
+
+def resolve_action(campaign, user, ability, level, targets, master, game, *, legacy=False, area=False):
+    single = targets[0] if len(targets) == 1 and not area else None
+    options = {
+        'slot_level': integer(level, 'Уровень ячейки', 0, 9),
+        'visibility': 'public' if all(target.visible for target in targets) else 'dm',
+    }
+    if single:
+        options['effect_target'] = single.pk
+    roll = use_ability(campaign, user, ability.pk, options)
     parts = roll.payload.get('parts') or [roll.payload]
+    if len(parts) * len(targets) > 200:
+        raise ValidationError('За один раз можно применить не более 200 результатов по целям')
     healing = effect_kind(roll) == 'healing'
-    if not roll.payload.get('deferred') and all('damage' in part for part in parts):
-        # The outcome is computed here. The client never supplies hit/save or HP values.
-        # Re-read the sheet after use_ability, including when the caster targets itself.
-        target = rows_for(session).get(pk=target.pk)
-        armor_class = target_sheet(target).armor_class
+    resolved = not roll.payload.get('deferred') and all(
+        any(key in part for key in ('damage', 'save', 'roll')) for part in parts
+    )
+    summaries = []
+    for target in targets:
+        summary = {'id': target.pk, 'name': target.name, 'resolved': resolved, 'parts': []}
+        summaries.append(summary)
+        if not resolved:
+            continue
+        # The caster can also be a target. Re-read after consuming slots/concentration.
+        target = rows_for(roll.session).get(pk=target.pk)
+        sheet = target_sheet(target)
         for index, part in enumerate(parts):
             check = part.get('roll') if not healing else None
             outcome = {}
             if check is not None:
                 outcome['hit'] = check['chosen'] == 20 or (
-                    check['chosen'] != 1 and check['total'] >= armor_class
+                    check['chosen'] != 1 and check['total'] >= sheet.armor_class
                 )
-            if 'save' in part and not healing:
-                outcome['save_outcome'] = 'roll'
-            row = DamageApplication.objects.create(
-                target=target, source_event=roll, requester=user, part_index=index,
-                is_attack=check is not None,
-            )
-            apply_damage(row, campaign, user, outcome, privileged=True, emit_event=False)
-            resolution = row.resolution
-            # Do not include target HP, AC, resistances or exact damage received.
-            summary['parts'].append({
-                key: resolution[key] for key in ('hit', 'save_outcome')
-                if resolution.get(key) is not None
-            })
-        summary['resolved'] = True
+            save = part.get('save') if not healing else None
+            if 'damage' in part:
+                if save:
+                    outcome['save_outcome'] = 'roll'
+                application = DamageApplication.objects.create(
+                    target=target, source_event=roll, requester=user, part_index=index,
+                    is_attack=check is not None,
+                )
+                apply_damage(application, campaign, user, outcome, privileged=True, emit_event=False)
+                outcome = {
+                    key: application.resolution[key] for key in ('hit', 'save_outcome')
+                    if application.resolution.get(key) is not None
+                }
+            elif save:
+                saving_throw = d20(computed(sheet)['saves'][save['ability']])
+                outcome['save_outcome'] = 'success' if saving_throw['total'] >= save['dc'] else 'failure'
+            summary['parts'].append(outcome)
+    if single:
+        roll.payload['token_target'] = summaries[0]
+    else:
+        roll.payload['token_targets'] = summaries
+        roll.payload['map_resolved'] = resolved
     roll.save(update_fields=['payload'])
-    return {'event': EventSerializer(roll).data, 'target': token_row(target, user, master, game)}
+    result = {'event': EventSerializer(roll).data}
+    if legacy:
+        result['target'] = token_row(single, user, master, game)
+    return result
 
 
 class NativeTokenScene(PersonalSheetAPI):
@@ -135,7 +210,7 @@ class NativeTokenScene(PersonalSheetAPI):
                 rows = rows.filter(visible=True, dmhub_game=game).exclude(dmhub_token='')
             targets = [token_row(t, access.user, master, game) for t in rows]
         return Response({
-            'session': session.pk if session else None, 'is_dm': master, 'targets': targets,
+            'session': session.pk if session else None, 'is_dm': master, 'targets': targets, 'map_actions': True,
         }, headers={'Cache-Control': 'no-store'})
 
     @extend_schema(request=OpenApiTypes.OBJECT, responses=OpenApiTypes.OBJECT)
@@ -150,6 +225,8 @@ class NativeTokenScene(PersonalSheetAPI):
             master = is_dm(campaign, user)
             if data.get('command') == 'link':
                 return link_target(session, user, master, game, data)
+            if data.get('command') == 'act':
+                return act_on_map(campaign, user, session, master, game, data)
             if data.get('command') == 'cast':
                 return cast_spell(campaign, user, session, master, game, data)
             raise ValidationError('Неизвестная команда токена')

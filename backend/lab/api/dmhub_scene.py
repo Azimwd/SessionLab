@@ -30,7 +30,7 @@ class NativeScene(PersonalSheetAPI):
                 events = events.filter(actor=user)
             for e in events[:100]:
                 token_target = e.payload.get('token_target', {})
-                if token_target.get('resolved'):
+                if e.payload.get('map_resolved') or token_target.get('resolved'):
                     continue
                 parts = []
                 for index, _ in enumerate(e.payload.get('parts') or [e.payload]):
