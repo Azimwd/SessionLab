@@ -102,6 +102,7 @@ def room_data(c, user, dm):
         Character.objects.filter(
             campaign=c,
             active=True,
+            scene_copy__isnull=True,
             owner__membership__campaign=c,
             owner__membership__active=True,
         )

@@ -21,7 +21,7 @@ class NativeScene(PersonalSheetAPI):
         session = c.sessions.filter(status='active').first()
         targets, sources, applications = [], [], []
         if session:
-            rows = SceneTarget.objects.filter(session=session, active=True).select_related('source__sheet').order_by('id')
+            rows = SceneTarget.objects.filter(session=session, active=True).select_related('source__sheet', 'instance__sheet').order_by('id')
             if not dm:
                 rows = rows.filter(visible=True)
             targets = [target_data(t, dm) for t in rows]
@@ -47,7 +47,7 @@ class NativeScene(PersonalSheetAPI):
                     sources.append({'id': e.id, 'label': e.payload.get('label', 'Действие'),
                                     'damage_type': e.payload.get('damage_type', ''), 'effect': effect_kind(e), 'parts': parts, 'effect_target':e.payload.get('effect_target')})
             history = DamageApplication.objects.filter(target__session=session, status='applied').select_related(
-                'target__source__sheet', 'source_event', 'requester').order_by('-id')
+                'target__source__sheet', 'target__instance__sheet', 'source_event', 'requester').order_by('-id')
             if not dm:
                 history = history.filter(requester=user, target__visible=True)
             applications = [application_data(r, dm) for r in history[:100]]

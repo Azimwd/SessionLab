@@ -238,7 +238,7 @@ refreshScene=function()
   S.sceneReading=false
   if preview~=S.preview or epoch~=(S.sceneEpoch or 0) then refreshScene() return end
   local hash=fingerprint(d)
-  if S.scene and S.scene.session~=d.session then S.sceneEdit=nil S.damageSource=nil resetDamage() end
+  if S.scene and S.scene.session~=d.session then S.sceneGroup=nil S.sceneEdit=nil S.damageSource=nil resetDamage() end
   S.scene=d
   if hash~=S.sceneHash then S.sceneHash=hash if not S.sceneEdit then draw() end end
  end,function(err) S.sceneReading=false S.scene=nil S.sceneHash=nil status(errorText(err)) draw() end)
@@ -276,8 +276,12 @@ local function sceneEditorUI()
  local e=S.sceneEdit local t=e.target
  local rows={label(t and "Настройки: "..t.name or "Добавить: "..e.source.name,W,20,"#B3A9FF"),input("sceneName",W,"Имя участника")}
  if t then
-  rows[#rows+1]=label("Текущие / максимальные / временные ХП",W,13,"#A0A6B2")
-  rows[#rows+1]=row({input("sceneHP",180,"ХП"),gap(),input("sceneMax",180,"Максимум"),gap(),input("sceneTemp",184,"Временные ХП")})
+  if t.sheet_character then
+   rows[#rows+1]=label("Хиты редактируются в листе экземпляра",W,13,"#A0A6B2")
+  else
+   rows[#rows+1]=label("Текущие / максимальные / временные ХП",W,13,"#A0A6B2")
+   rows[#rows+1]=row({input("sceneHP",180,"ХП"),gap(),input("sceneMax",180,"Максимум"),gap(),input("sceneTemp",184,"Временные ХП")})
+  end
   rows[#rows+1]=button(e.visible and "Виден игрокам" or "Скрыт от игроков",W,function() e.visible=not e.visible draw() end)
   rows[#rows+1]=button(e.targetable and "Можно выбирать целью" or "Нельзя выбирать целью",W,function() e.targetable=not e.targetable draw() end)
   if t.linked_sheet then rows[#rows+1]=label("ХП связаны с листом игрока",W,13,"#A0A6B2") end
@@ -292,8 +296,10 @@ local function sceneEditorUI()
   if not name or not name:match("%S") then status("Введите имя участника") return end
   if t then
    local hp,max,temp=tonumber(S.draft.sceneHP),tonumber(S.draft.sceneMax),tonumber(S.draft.sceneTemp)
-   if not hp or not max or not temp or hp%1~=0 or max%1~=0 or temp%1~=0 or hp<0 or max<1 or hp>max or max>1000000 or temp<0 or temp>1000000 then status("Проверьте ХП: целые числа, текущие не больше максимальных") return end
-   sendScene({command="update",target=t.id,version=t.version,name=name,hp_current=hp,hp_max=max,hp_temp=temp,visible=e.visible,targetable=e.targetable,defenses=e.defenses})
+   if not t.sheet_character and (not hp or not max or not temp or hp%1~=0 or max%1~=0 or temp%1~=0 or hp<0 or max<1 or hp>max or max>1000000 or temp<0 or temp>1000000) then status("Проверьте ХП: целые числа, текущие не больше максимальных") return end
+   local body={command="update",target=t.id,version=t.version,name=name,visible=e.visible,targetable=e.targetable,defenses=e.defenses}
+   if not t.sheet_character then body.hp_current=hp body.hp_max=max body.hp_temp=temp end
+   sendScene(body)
   else
    local count=e.source.kind=="player" and 1 or tonumber(S.draft.sceneCount)
    if not count or count%1~=0 or count<1 or count>20 then status("Количество NPC: 1…20") return end
@@ -318,17 +324,50 @@ local function sceneUI()
    end
   end
  else rows[#rows+1]=label("Защиты и здоровье настраивает мастер. ХП целей скрыты.",W,13,"#A0A6B2") end
- for _,t in ipairs(d.targets or {}) do
-  local target=t
-  local content={label(t.linked_sheet and "ЛИСТ ИГРОКА" or "УЧАСТНИК СЦЕНЫ",C,10,"#858D9F"),label(t.name,C,21)}
+ local function appendTarget(t, copies)
+  local content={label(copies and "ЛИСТ ЭКЗЕМПЛЯРА" or t.linked_sheet and "ЛИСТ ИГРОКА" or "УЧАСТНИК СЦЕНЫ",C,10,"#858D9F"),label(t.name,C,21)}
   if d.master_view then
    content[#content+1]=label("ХП "..fmt(t.hp_current).." / "..fmt(t.hp_max).."    + "..fmt(t.hp_temp).." временных",C,19,"#B3A9FF")
    content[#content+1]=label((t.visible and "Виден игрокам" or "Скрыт от игроков").." · "..(t.targetable and "Доступен как цель" or "Нельзя выбрать целью"),C,12,"#A0A6B2")
-   content[#content+1]=row({button("Настроить",264,function() editScene(target,nil) end),gap(),button(S.removeTarget==t.id and "Подтвердить удаление" or "Убрать из сцены",264,function()
-    if S.removeTarget==target.id then sendScene({command="update",target=target.id,version=target.version,active=false}) else S.removeTarget=target.id draw() end
+   if copies then
+    content[#content+1]=button("Открыть лист",C,function()
+     local sheet=rawget(_G,"SLsheet")
+     if sheet and type(sheet.openSceneSheet)=="function" then
+      sheet.openSceneSheet(copies,t.sheet_character.id)
+     else
+      status("Установите обновлённый мод SessionLab · лист")
+     end
+    end,true)
+   end
+   content[#content+1]=row({button("Настроить",264,function() editScene(t,nil) end),gap(),button(S.removeTarget==t.id and "Подтвердить удаление" or "Убрать из сцены",264,function()
+    if S.removeTarget==t.id then sendScene({command="update",target=t.id,version=t.version,active=false}) else S.removeTarget=t.id draw() end
    end)},C)
   end
   rows[#rows+1]=card(content)
+ end
+ local groups, order = {}, {}
+ for _,t in ipairs(d.targets or {}) do
+  if d.master_view and t.sheet_character then
+   local source=t.source
+   if not groups[source] then groups[source]={} order[#order+1]=source end
+   local group=groups[source]
+   group[#group+1]=t
+  else
+   appendTarget(t)
+  end
+ end
+ for _,source in ipairs(order) do
+  local group=groups[source]
+  local opened=S.sceneGroup==source
+  rows[#rows+1]=button((opened and "− " or "+ ")..group[1].source_name.." · "..fmt(#group).." в сцене",W,function()
+   if opened then S.sceneGroup=nil else S.sceneGroup=source end
+   draw()
+  end,true)
+  if opened then
+   local copies={}
+   for _,target in ipairs(group) do copies[#copies+1]=target.sheet_character end
+   for _,target in ipairs(group) do appendTarget(target,copies) end
+  end
  end
  if #(d.targets or {})==0 then rows[#rows+1]=label("В сцене пока нет участников",W,14,"#A0A6B2") end
  return column(rows)

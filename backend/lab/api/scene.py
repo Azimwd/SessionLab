@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from lab.models import Character, CharacterSheet, SceneTarget, DamageApplication, RoomEvent
 from lab.services.sheets import active_session, sheet_for, event
+from lab.services.scene_instances import clone_scene_npc
 from lab.services.dice import d20
 from .common import campaign_for, is_dm, mutate
 from .sheets import require_version
@@ -41,14 +42,15 @@ def defenses(value):
 
 
 def target_sheet(target):
+    character = target.instance if target.instance_id else target.source
     try:
-        return target.source.sheet
+        return character.sheet
     except CharacterSheet.DoesNotExist:
-        return sheet_for(target.source)
+        return sheet_for(character)
 
 
 def hp(target):
-    if target.linked_sheet:
+    if target.uses_sheet:
         sh = target_sheet(target)
         return sh.hp_current, sh.hp_max, sh.hp_temp
     return target.hp_current, target.hp_max, target.hp_temp
@@ -61,7 +63,13 @@ def target_data(t, dm=False):
         current, maximum, temporary = hp(t)
         result.update(source=t.source_id, visible=t.visible, active=t.active, linked_sheet=t.linked_sheet,
                       hp_current=current, hp_max=maximum, hp_temp=temporary, defenses=t.defenses,
-                      conditions=target_sheet(t).conditions if t.linked_sheet else t.conditions)
+                      conditions=target_sheet(t).conditions if t.uses_sheet else t.conditions)
+        if t.instance_id:
+            result.update(source_name=t.source.name, sheet_character={
+                'id': t.instance_id, 'name': t.name, 'character_class': t.instance.character_class,
+                'kind': 'npc', 'species': t.instance.species, 'level': t.instance.level,
+                'description': t.instance.description,
+            })
     return result
 
 
@@ -95,7 +103,7 @@ def application_data(row, dm=False):
 
 def create_targets(c, user, data):
     s = active_session(c)
-    source = get_object_or_404(Character, campaign=c, active=True, pk=integer(data.get('source'), 'Лист', 1, 9223372036854775807))
+    source = get_object_or_404(Character, campaign=c, active=True, scene_copy__isnull=True, pk=integer(data.get('source'), 'Лист', 1, 9223372036854775807))
     count = integer(data.get('count', 1), 'Количество', 1, 20)
     linked = source.kind == 'player'
     if linked and (count != 1 or SceneTarget.objects.filter(session=s, source=source, linked_sheet=True, active=True).exists()):
@@ -119,13 +127,17 @@ def create_targets(c, user, data):
             used.add(int(suffix))
     next_number = 1
     created = []
-    for i in range(count):
+    actions = list(source.actions.filter(active=True)) if not linked else []
+    for _ in range(count):
         while next_number in used:
             next_number += 1
         name = base if linked else f'{base} № {next_number}'
         used.add(next_number)
+        instance = None if linked else clone_scene_npc(
+            source, sh, actions, name, sh.hp_max, sh.hp_max, 0, []
+        )
         t = SceneTarget.objects.create(session=s, source=source, name=name, linked_sheet=linked,
-            hp_max=sh.hp_max, hp_current=sh.hp_max, defenses=protection)
+            instance=instance, hp_max=sh.hp_max, hp_current=sh.hp_max, defenses=protection)
         created.append(target_data(t, True))
     return {'targets': created}
 
@@ -135,7 +147,7 @@ class SceneTargets(APIView):
         c = campaign_for(request)
         dm = is_dm(c, request.user) and request.query_params.get('view') != 'player'
         s = c.sessions.filter(status='active').first()
-        targets = SceneTarget.objects.filter(session=s, active=True).select_related('source__sheet') if s else []
+        targets = SceneTarget.objects.filter(session=s, active=True).select_related('source__sheet', 'instance__sheet') if s else []
         if not dm and s:
             targets = targets.filter(visible=True)
         return Response({'targets': [target_data(t, dm) for t in targets], 'damage_types': DAMAGE_TYPES})
@@ -158,6 +170,8 @@ def update_target(c, user, pk, data):
         if not name or len(name)>100:
             raise ValidationError('Имя цели: от 1 до 100 символов')
         t.name = name
+        if t.instance_id:
+            Character.objects.filter(pk=t.instance_id).update(name=name)
     if 'defenses' in data:
         t.defenses = defenses(data['defenses'])
     if 'conditions' in data:
@@ -166,7 +180,7 @@ def update_target(c, user, pk, data):
         if not isinstance(values, list) or any(not isinstance(v, str) or v not in CONDITIONS for v in values):
             raise ValidationError('Неизвестные состояния')
         values = list(dict.fromkeys(values))
-        if t.linked_sheet:
+        if t.uses_sheet:
             sh = target_sheet(t)
             sh.conditions = values
             sh.version += 1
@@ -178,7 +192,7 @@ def update_target(c, user, pk, data):
         maximum = integer(data.get('hp_max', maximum), 'Максимум ХП', 1)
         current = integer(data.get('hp_current', old), 'ХП', 0, maximum)
         temp = integer(data.get('hp_temp', temp), 'Временные ХП')
-        if t.linked_sheet:
+        if t.uses_sheet:
             sh = target_sheet(t)
             sh.hp_max, sh.hp_current, sh.hp_temp = maximum, current, temp
             sh.version += 1
@@ -201,7 +215,7 @@ def apply_healing(row, campaign, user, amount):
     t = row.target
     before, maximum, temporary = hp(t)
     after = min(maximum, before + amount)
-    if t.linked_sheet:
+    if t.uses_sheet:
         sh = target_sheet(t)
         sh.hp_current = after
         if before == 0 and after > 0:
@@ -288,7 +302,7 @@ def apply_damage(row, campaign, user, data, privileged=False):
         final,effect_keys,components=component_damage(row,part,amount,damage_type,defense,before,maximum)
     absorbed = min(temporary, final)
     after = max(0, before-(final-absorbed))
-    if t.linked_sheet:
+    if t.uses_sheet:
         sh = target_sheet(t)
         sh.hp_current, sh.hp_temp = after, temporary-absorbed
         sh.version += 1
@@ -359,7 +373,7 @@ def submit_damage_part(c, user, data):
     previous = DamageApplication.objects.filter(source_event=source, part_index=index)
     if previous.filter(status='applied', **({} if attack else {'target_id__in': ids})).exists():
         raise ValidationError('Этот результат уже применён')
-    targets = SceneTarget.objects.filter(id__in=ids, session=s, active=True).select_related('source__sheet')
+    targets = SceneTarget.objects.filter(id__in=ids, session=s, active=True).select_related('source__sheet', 'instance__sheet')
     if not dm:
         targets = targets.filter(visible=True, targetable=True)
     if targets.count() != len(ids):
@@ -387,7 +401,7 @@ class DamageRequests(APIView):
         c = campaign_for(request)
         dm = is_dm(c, request.user) and request.query_params.get('view') != 'player'
         s = c.sessions.filter(status='active').first()
-        rows = DamageApplication.objects.filter(target__session=s).select_related('target__source__sheet', 'source_event', 'requester').order_by('-id')
+        rows = DamageApplication.objects.filter(target__session=s).select_related('target__source__sheet', 'target__instance__sheet', 'source_event', 'requester').order_by('-id')
         if not dm:
             rows = rows.filter(requester=request.user, target__visible=True)
         status = request.query_params.get('status')
@@ -423,7 +437,7 @@ class ResolveDamage(APIView):
             s = active_session(c)
             # PostgreSQL must lock ONLY the application, not the nullable sheet
             # joined for presentation. Locking the outer join raised HTTP 500.
-            row = get_object_or_404(DamageApplication.objects.select_for_update(of=('self',)).select_related('target__source__sheet', 'source_event', 'requester'),
+            row = get_object_or_404(DamageApplication.objects.select_for_update(of=('self',)).select_related('target__source__sheet', 'target__instance__sheet', 'source_event', 'requester'),
                                      pk=pk, target__session=s, source_event__campaign=c)
             dm = is_dm(c, request.user)
             if not dm and (row.source_event.actor_id != request.user.id or row.requester_id != request.user.id):

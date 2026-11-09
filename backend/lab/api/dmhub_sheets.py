@@ -167,7 +167,7 @@ class SheetBridge(APIView):
     @extend_schema(responses=OpenApiTypes.OBJECT)
     def get(self, request):
         access = access_for(request)
-        chars = Character.objects.filter(campaign=access.campaign, active=True)
+        chars = Character.objects.filter(campaign=access.campaign, active=True, scene_copy__isnull=True)
         if not is_dm(access.campaign, access.user):
             chars = chars.filter(owner=access.user)
         folders = CharacterFolder.objects.filter(campaign=access.campaign)

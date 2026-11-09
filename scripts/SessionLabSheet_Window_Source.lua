@@ -115,6 +115,8 @@ refresh=function()
    local changed=signature(S.data)~=signature(d)
    S.data=d S.msg="Лист загружен"
    if changed or not S.renderedData then S.renderedData=true draw() end
+  end,nil,function()
+   if S.id==id and S.sceneSiblings then S.data=nil S.renderedData=false end
   end)
  end
 end
@@ -201,13 +203,31 @@ end
 local function button(t,w,fn,accent,disabled)
  return gui.Button{text=t,width=w,height=34,minHeight=34,maxHeight=34,fontSize=13,color="#F4F5F7",halign="left",valign="top",classes={accent and "slaccent" or "slbutton"},interactable=not disabled,hmargin=0,vmargin=3,hpad=0,vpad=0,textAlignment="center",press=function() if not disabled then fn() end end}
 end
-local function choose(c)
- if S.editor then confirmAction("Отменить несохранённые изменения?",function() S.editor=nil choose(c) end) return end
- local history={tonumber(c.id)}
- for _,id in ipairs(S.recent) do if id~=tonumber(c.id) and #history<6 then history[#history+1]=id end end
- S.recent=history
+local function choose(c, siblings)
+ if S.busy or S.pendingWrite then return end
+ if S.editor then
+  confirmAction("Отменить несохранённые изменения?",function() S.editor=nil choose(c,siblings) end)
+  return
+ end
+ S.sceneSiblings=siblings
+ if not siblings then
+  local history={tonumber(c.id)}
+  for _,id in ipairs(S.recent) do if id~=tonumber(c.id) and #history<6 then history[#history+1]=id end end
+  S.recent=history
+ end
  S.id=tonumber(c.id) S.data=nil S.page=1 S.open=nil S.search="" S.chooser=false S.renderedData=false S.typing=false
- S.msg="Загрузка: "..c.name draw() dmhub.Schedule(0.1,refresh)
+ S.result=nil S.damageEvent=nil
+ S.msg="Загрузка: "..c.name draw()
+ if S.on then dmhub.Schedule(0.1,refresh) end
+end
+S.openSceneSheet=function(siblings, id)
+ for _,copy in ipairs(siblings) do
+  if tonumber(copy.id)==tonumber(id) then
+   choose(copy,siblings)
+   openWindow()
+   return
+  end
+ end
 end
 local function changeTab(t)
  if S.editor then confirmAction("Отменить несохранённые изменения?",function() S.editor=nil changeTab(t) end) return end
@@ -224,11 +244,16 @@ local function clearWindowReferences()
  S.windowTitle=nil S.windowStatus=nil S.chooserHost=nil
  S.typing=false S.selectOpen=nil
 end
+local function clearSceneSelection()
+ if not S.sceneSiblings then return end
+ S.sceneSiblings=nil S.id=nil S.data=nil S.result=nil S.damageEvent=nil
+end
 local function closeWindow()
  if S.editor then confirmAction("Закрыть без сохранения?",function() S.editor=nil closeWindow() end) return end
  local window=S.window
  -- Clear references BEFORE the engine destroys the native userdata.
  clearWindowReferences()
+ clearSceneSelection()
  if window then window:DestroySelf() end
 end
 -- @include SessionLabSheet_Editor_Source.lua
@@ -276,7 +301,7 @@ draw=function(leftOnly)
   return "Без папки"
  end
  local byId={} for _,c in ipairs(S.list or {}) do byId[tonumber(c.id)]=c end
- if valid then
+ if valid and not S.sceneSiblings then
   left[#left+1]=label(folderName(d.character),L,12,"#A0A6B2")
   left[#left+1]=button(S.pinned[S.id] and "Убрать из быстрого доступа" or "Закрепить для боя",L,function()
    S.pinned[S.id]=not S.pinned[S.id] draw(true)
@@ -352,6 +377,14 @@ draw=function(leftOnly)
   local skillRows={label("Навыки",LI,16)}
   for _,a in ipairs(skills) do local k=a[1] local prof=tonumber((sh.skills or {})[k]) or 0
    skillRows[#skillRows+1]=line({button(({"—","Вл.","Мст."})[prof+1],40,function() quickSkill(k) end,false,S.busy or S.pendingWrite~=nil),button(a[2].."  "..signed((cs.skills or {})[k]),LI-48,function() roll("skill",k) end)},LI)
+  end
+  if S.sceneSiblings then
+   local copies={label("ЛИСТЫ ЭТОЙ ГРУППЫ",L-24,12,"#9085FF")}
+   for _,entry in ipairs(S.sceneSiblings) do
+    local copy=entry
+    copies[#copies+1]=button(copy.name,L-24,function() choose(copy,S.sceneSiblings) end,tonumber(copy.id)==S.id,S.busy)
+   end
+   table.insert(left,1,card(copies,L))
   end
   left[#left+1]=card(skillRows,L)
   left[#left+1]=cycle("Проверки",S.rollMode or "normal",{{"normal","Обычный"},{"advantage","Преимущество"},{"disadvantage","Помеха"}},L,function(v) S.rollMode=v end)
@@ -505,7 +538,7 @@ openWindow=function()
    {selectors={"slinput"},priority=100,bgimage="panels/square.png",bgcolor="#101217ff",hpad=0,vpad=0,hmargin=0,borderWidth=1,borderColor="#303642ff",cornerRadius=6,color="#F4F5F7"},
   },
 
-  destroy=function() if S.window==window then clearWindowReferences() end end,
+  destroy=function() if S.window==window then clearWindowReferences() clearSceneSelection() end end,
   children={gui.Panel{width=P.window,height=P.height,floating=true,halign="center",valign="center",bgimage="panels/square.png",bgcolor="#101217ff",interactable=false},
    gui.Panel{width=P.window,height=12},dragHandle,
    S.windowStatus,S.panel,gui.Panel{width=P.window,height=12}},

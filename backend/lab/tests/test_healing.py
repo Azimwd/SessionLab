@@ -16,11 +16,11 @@ def healing(world, amount=21, alias='лечение'):
 @pytest.mark.parametrize('alias',['healing','heal','лечение','исцеление',' HEALING '])
 def test_healing_caps_at_max_ignores_defenses_and_keeps_temp_hp(world,alias):
     _, ts=targets(world,{'all':'immunity'})
-    t=SceneTarget.objects.get(pk=ts[0]['id']);t.hp_current=35;t.hp_temp=8;t.save()
+    t=SceneTarget.objects.get(pk=ts[0]['id']);sh=t.instance.sheet;sh.hp_current=35;sh.hp_temp=8;sh.save()
     e=healing(world,alias=alias)
     r=send(world,e,[t.pk],{})
     assert r.status_code==200,r.content
-    t.refresh_from_db();assert (t.hp_current,t.hp_temp)==(40,8)
+    sh.refresh_from_db();assert (sh.hp_current,sh.hp_temp)==(40,8)
     assert r.json()['data'][0]['effect']=='healing'
     assert 'hp_current' not in str(r.json()) and 'resolution' not in str(r.json())
     record=DamageApplication.objects.get(source_event=e)

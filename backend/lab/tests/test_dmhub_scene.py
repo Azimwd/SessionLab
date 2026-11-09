@@ -43,7 +43,7 @@ def test_native_damage_shared_hp_defenses_and_idempotency(world):
     assert r.status_code==200,r.content
     assert command(user,session,data,'native-damage-once').json()==r.json()
     assert DamageApplication.objects.count()==2
-    assert [SceneTarget.objects.get(pk=t['id']).hp_current for t in ts]==[30,35]
+    assert [SceneTarget.objects.get(pk=t['id']).instance.sheet.hp_current for t in ts]==[30,35]
     assert 'resolution' not in str(r.json()) and 'hp_current' not in str(r.json())
     assert command(user,session,data).status_code==400
     web = client(dm).get(scoped('/api/scene/targets/',c)).json()['data']['targets']
@@ -106,6 +106,6 @@ def test_native_scene_applies_selected_parts_in_one_idempotent_command(world):
     assert response.status_code==200,response.content
     assert len(response.json()['data']['applications'])==2
     assert command(api,s,data,'native-multi-once').json()==response.json()
-    assert SceneTarget.objects.get(pk=target).hp_current==32
+    assert SceneTarget.objects.get(pk=target).instance.sheet.hp_current==32
     assert DamageApplication.objects.filter(source_event=e).count()==2
     assert 'hp_current' not in str(response.json()) and 'resolution' not in str(response.json())

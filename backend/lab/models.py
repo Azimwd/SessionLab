@@ -559,12 +559,19 @@ class SceneTarget(Timestamped):
     targetable = models.BooleanField(default=True)
     active = models.BooleanField(default=True)
     linked_sheet = models.BooleanField(default=False)
+    instance = models.OneToOneField(
+        Character, on_delete=models.PROTECT, null=True, blank=True, related_name='scene_copy'
+    )
     hp_max = models.PositiveIntegerField(default=10)
     hp_current = models.PositiveIntegerField(default=10)
     hp_temp = models.PositiveIntegerField(default=0)
     conditions = models.JSONField(default=list, blank=True)
     defenses = models.JSONField(default=dict, blank=True)
     version = models.PositiveIntegerField(default=1)
+
+    @property
+    def uses_sheet(self):
+        return self.linked_sheet or self.instance_id is not None
 
     class Meta:
         constraints = [

@@ -4320,3 +4320,21 @@ blockquote {
 .scene-roll-picker>label{display:flex;align-items:center;gap:10px;padding:10px;margin-top:6px;border:1px solid var(--border);border-radius:8px;cursor:pointer}
 .scene-roll-picker>label.selected{border-color:var(--accent);background:var(--accent-bg)}
 .scene-part-outcomes h4{margin:14px 0 8px}
+
+
+.scene-instance-group { display: grid; gap: 10px; justify-items: start; }
+.scene-instance-panel {
+  display: grid;
+  gap: 14px;
+  margin: 16px 0 24px;
+  padding: clamp(10px, 2vw, 20px);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  min-width: 0;
+}
+.scene-instance-panel > .sheet-tabs {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+.scene-instance-panel > .sheet-tabs button { flex-shrink: 0; }

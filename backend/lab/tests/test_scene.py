@@ -37,8 +37,8 @@ def test_immediate_instances_and_hidden_hp(world):
     r=send(world,event(world),[ts[0]['id']]);assert r.status_code==200,r.content
     row=r.json()['data'][0]
     assert row['status']=='applied' and 'resolution' not in row and 'part' not in row
-    assert SceneTarget.objects.get(pk=ts[0]['id']).hp_current==19
-    assert SceneTarget.objects.get(pk=ts[1]['id']).hp_current==40
+    assert SceneTarget.objects.get(pk=ts[0]['id']).instance.sheet.hp_current==19
+    assert SceneTarget.objects.get(pk=ts[1]['id']).instance.sheet.hp_current==40
     npc.sheet.refresh_from_db();assert npc.sheet.hp_current==40
     own=client(world[1]).get(scoped('/api/scene/damage/',world[3])+'&status=applied').json()['data'][0]
     assert own['status']=='applied' and 'resolution' not in own
@@ -50,21 +50,21 @@ def test_save_before_saved_defense(world,defense,hp):
     _,ts=targets(world,{'fire':defense})
     r=send(world,event(world,save=True),[ts[0]['id']],{str(ts[0]['id']):{'save_outcome':'success'}})
     assert r.status_code==200,r.content
-    assert SceneTarget.objects.get(pk=ts[0]['id']).hp_current==hp
+    assert SceneTarget.objects.get(pk=ts[0]['id']).instance.sheet.hp_current==hp
 
 
 def test_idempotency_temp_hp_and_double_apply(world):
     _,ts=targets(world)
-    t=SceneTarget.objects.get(pk=ts[0]['id']);t.hp_temp=7;t.save()
+    t=SceneTarget.objects.get(pk=ts[0]['id']);sh=t.instance.sheet;sh.hp_temp=7;sh.save()
     ev=event(world,amount=15)
     row=send(world,ev,[t.id],key='same-request-123').json()['data'][0]
     assert send(world,ev,[t.id],key='same-request-123').json()['data'][0]['id']==row['id']
     assert send(world,ev,[t.id]).status_code==400
     assert DamageApplication.objects.count()==1
-    t.refresh_from_db();assert t.hp_current==32 and t.hp_temp==0
+    t.refresh_from_db();assert t.instance.sheet.hp_current==32 and t.instance.sheet.hp_temp==0
     r=post(client(world[1]),scoped(f"/api/scene/damage/{row['id']}/resolve/",world[3]),{'action':'apply'})
     assert r.status_code==400
-    t.refresh_from_db();assert t.hp_current==32
+    t.refresh_from_db();assert t.instance.sheet.hp_current==32
 
 
 def test_permissions_hidden_and_foreign_targets(world):
@@ -89,7 +89,7 @@ def test_attack_one_target_and_player_miss(world):
     assert send(world,ev,[t['id'] for t in ts]).status_code==400
     r=send(world,ev,[ts[0]['id']],{str(ts[0]['id']):{'hit':False}});assert r.status_code==200,r.content
     assert send(world,ev,[ts[1]['id']]).status_code==400
-    assert SceneTarget.objects.get(pk=ts[0]['id']).hp_current==40
+    assert SceneTarget.objects.get(pk=ts[0]['id']).instance.sheet.hp_current==40
 
 
 def test_per_target_save_and_atomic_validation(world):
@@ -97,11 +97,11 @@ def test_per_target_save_and_atomic_validation(world):
     ev=event(world,save=True)
     outcomes={str(ts[0]['id']):{'save_outcome':'failure'}}
     r=send(world,ev,[t['id'] for t in ts],outcomes);assert r.status_code==400,r.content
-    assert list(SceneTarget.objects.values_list('hp_current',flat=True))==[40,40]
+    assert list(SceneTarget.objects.values_list('instance__sheet__hp_current',flat=True))==[40,40]
     assert DamageApplication.objects.count()==0
     outcomes[str(ts[1]['id'])]={'save_outcome':'success'}
     assert send(world,ev,[t['id'] for t in ts],outcomes).status_code==200
-    assert list(SceneTarget.objects.order_by('id').values_list('hp_current',flat=True))==[19,30]
+    assert list(SceneTarget.objects.order_by('id').values_list('instance__sheet__hp_current',flat=True))==[19,30]
 
 
 def test_linked_player(world):
@@ -129,8 +129,8 @@ def test_conditions_are_independent_and_private(world):
     r=client(world[0]).patch(scoped(f"/api/scene/targets/{t['id']}/",world[3]),
         {'version':t['version'],'conditions':['Ослеплён']},format='json',HTTP_IDEMPOTENCY_KEY='conditions-on-target')
     assert r.status_code==200,r.content
-    assert SceneTarget.objects.get(pk=t['id']).conditions==['Ослеплён']
-    assert SceneTarget.objects.get(pk=ts[1]['id']).conditions==[] and npc.sheet.conditions==[]
+    assert SceneTarget.objects.get(pk=t['id']).instance.sheet.conditions==['Ослеплён']
+    assert SceneTarget.objects.get(pk=ts[1]['id']).instance.sheet.conditions==[] and npc.sheet.conditions==[]
 
 
 def test_hidden_target_log_is_private(world):
@@ -147,9 +147,9 @@ def test_client_cannot_override_protection_or_amount(world,extra):
     body={'source_event':e.id,'targets':[ts[0]['id']],**extra}
     assert post(client(world[1]),scoped('/api/scene/damage/',world[3]),body).status_code==400
     assert send(world,e,[ts[0]['id']],{str(ts[0]['id']):extra}).status_code==400
-    assert SceneTarget.objects.get(pk=ts[0]['id']).hp_current==40
+    assert SceneTarget.objects.get(pk=ts[0]['id']).instance.sheet.hp_current==40
     assert send(world,e,[ts[0]['id']]).status_code==200
-    assert SceneTarget.objects.get(pk=ts[0]['id']).hp_current==40
+    assert SceneTarget.objects.get(pk=ts[0]['id']).instance.sheet.hp_current==40
 
 
 def test_legacy_pending_author_applies_and_other_player_denied(world):
@@ -162,7 +162,7 @@ def test_legacy_pending_author_applies_and_other_player_denied(world):
     r=post(client(world[1]),path,{'action':'apply','save_outcome':'failure'})
     assert r.status_code==200,r.content
     assert r.json()['data']['status']=='applied' and 'resolution' not in r.json()['data']
-    assert SceneTarget.objects.get(pk=ts[0]['id']).hp_current==30
+    assert SceneTarget.objects.get(pk=ts[0]['id']).instance.sheet.hp_current==30
 
 
 def test_existing_pending_reused_without_duplicate(world):
@@ -177,8 +177,8 @@ def test_old_attack_reservation_can_be_reassigned(world):
     row=DamageApplication.objects.create(target_id=ts[0]['id'],source_event=e,requester=world[1],is_attack=True)
     assert send(world,e,[ts[1]['id']]).status_code==200
     row.refresh_from_db();assert row.status=='rejected'
-    assert SceneTarget.objects.get(pk=ts[0]['id']).hp_current==40
-    assert SceneTarget.objects.get(pk=ts[1]['id']).hp_current==19
+    assert SceneTarget.objects.get(pk=ts[0]['id']).instance.sheet.hp_current==40
+    assert SceneTarget.objects.get(pk=ts[1]['id']).instance.sheet.hp_current==19
 
 
 def test_postgres_lock_excludes_nullable_join():
@@ -218,3 +218,44 @@ def test_scene_numbering_reuses_removed_instances_and_ignores_other_sessions(wor
     session.status='completed';session.save()
     GameSession.objects.create(campaign=c,name='Next',status='active')
     assert add()[0]['name']=='Стражник № 1'
+
+
+def test_copy_sheet_lifecycle_and_independent_actions(world):
+    dm, player, _, campaign, _, session = world
+    npc = Character.objects.create(campaign=campaign, owner=dm, kind='npc', name='Стражник')
+    template = CharacterSheet.objects.create(character=npc, hp_max=40, hp_current=40, armor_class=17)
+    action = CharacterAbility.objects.create(character=npc, kind='attack', name='Копьё', dice='1d8')
+    master = client(dm)
+    response = post(master, scoped('/api/scene/targets/', campaign), {'source': npc.pk, 'count': 2})
+    assert response.status_code == 200, response.content
+    first, second = response.json()['data']['targets']
+    copy_id = first['sheet_character']['id']
+    path = scoped(f'/api/characters/{copy_id}/sheet/', campaign)
+    assert master.get(path).json()['data']['armor_class'] == 17
+    assert client(player).get(path).status_code == 403
+    copies = CharacterAbility.objects.filter(character_id=copy_id)
+    assert copies.get().dice == '1d8' and copies.get().pk != action.pk
+    roster = master.get(scoped('/api/characters/', campaign)).json()['data']['results']
+    assert copy_id not in {row['id'] for row in roster}
+
+    sheet = master.get(path).json()['data']
+    resource = scoped(f'/api/characters/{copy_id}/resources/', campaign)
+    assert post(master, resource, {'action': 'damage', 'amount': 6, 'version': sheet['version']}).status_code == 200
+    assert send(world, event(world, amount=5), [first['id']]).status_code == 200
+    assert master.get(path).json()['data']['hp_current'] == 29
+    assert CharacterSheet.objects.get(character_id=second['sheet_character']['id']).hp_current == 40
+    template.refresh_from_db()
+    assert template.hp_current == 40
+
+    row = SceneTarget.objects.get(pk=first['id'])
+    url = scoped(f'/api/scene/targets/{row.id}/', campaign)
+    result = master.patch(url, {'version': row.version, 'active': False}, format='json',
+                          HTTP_IDEMPOTENCY_KEY='retire-scene-copy')
+    assert result.status_code == 200
+    assert master.get(path).status_code == 403
+    assert send(world, event(world), [row.pk]).status_code == 400
+    assert DamageApplication.objects.filter(target=row).count() == 1
+    session.status = 'completed'
+    session.save(update_fields=['status'])
+    other_path = scoped(f"/api/characters/{second['sheet_character']['id']}/sheet/", campaign)
+    assert master.get(other_path).status_code == 403

@@ -239,7 +239,7 @@ refreshScene=function()
   S.sceneReading=false
   if preview~=S.preview or epoch~=(S.sceneEpoch or 0) then refreshScene() return end
   local hash=fingerprint(d)
-  if S.scene and S.scene.session~=d.session then S.sceneEdit=nil S.damageSource=nil resetDamage() end
+  if S.scene and S.scene.session~=d.session then S.sceneGroup=nil S.sceneEdit=nil S.damageSource=nil resetDamage() end
   S.scene=d
   if hash~=S.sceneHash then S.sceneHash=hash if not S.sceneEdit then draw() end end
  end,function(err) S.sceneReading=false S.scene=nil S.sceneHash=nil status(errorText(err)) draw() end)
@@ -277,8 +277,12 @@ local function sceneEditorUI()
  local e=S.sceneEdit local t=e.target
  local rows={label(t and "\208\157\208\176\209\129\209\130\209\128\208\190\208\185\208\186\208\184: "..t.name or "\208\148\208\190\208\177\208\176\208\178\208\184\209\130\209\140: "..e.source.name,W,20,"#B3A9FF"),input("sceneName",W,"\208\152\208\188\209\143 \209\131\209\135\208\176\209\129\209\130\208\189\208\184\208\186\208\176")}
  if t then
-  rows[#rows+1]=label("\208\162\208\181\208\186\209\131\209\137\208\184\208\181 / \208\188\208\176\208\186\209\129\208\184\208\188\208\176\208\187\209\140\208\189\209\139\208\181 / \208\178\209\128\208\181\208\188\208\181\208\189\208\189\209\139\208\181 \208\165\208\159",W,13,"#A0A6B2")
-  rows[#rows+1]=row({input("sceneHP",180,"\208\165\208\159"),gap(),input("sceneMax",180,"\208\156\208\176\208\186\209\129\208\184\208\188\209\131\208\188"),gap(),input("sceneTemp",184,"\208\146\209\128\208\181\208\188\208\181\208\189\208\189\209\139\208\181 \208\165\208\159")})
+  if t.sheet_character then
+   rows[#rows+1]=label("\208\165\208\184\209\130\209\139 \209\128\208\181\208\180\208\176\208\186\209\130\208\184\209\128\209\131\209\142\209\130\209\129\209\143 \208\178 \208\187\208\184\209\129\209\130\208\181 \209\141\208\186\208\183\208\181\208\188\208\191\208\187\209\143\209\128\208\176",W,13,"#A0A6B2")
+  else
+   rows[#rows+1]=label("\208\162\208\181\208\186\209\131\209\137\208\184\208\181 / \208\188\208\176\208\186\209\129\208\184\208\188\208\176\208\187\209\140\208\189\209\139\208\181 / \208\178\209\128\208\181\208\188\208\181\208\189\208\189\209\139\208\181 \208\165\208\159",W,13,"#A0A6B2")
+   rows[#rows+1]=row({input("sceneHP",180,"\208\165\208\159"),gap(),input("sceneMax",180,"\208\156\208\176\208\186\209\129\208\184\208\188\209\131\208\188"),gap(),input("sceneTemp",184,"\208\146\209\128\208\181\208\188\208\181\208\189\208\189\209\139\208\181 \208\165\208\159")})
+  end
   rows[#rows+1]=button(e.visible and "\208\146\208\184\208\180\208\181\208\189 \208\184\208\179\209\128\208\190\208\186\208\176\208\188" or "\208\161\208\186\209\128\209\139\209\130 \208\190\209\130 \208\184\208\179\209\128\208\190\208\186\208\190\208\178",W,function() e.visible=not e.visible draw() end)
   rows[#rows+1]=button(e.targetable and "\208\156\208\190\208\182\208\189\208\190 \208\178\209\139\208\177\208\184\209\128\208\176\209\130\209\140 \209\134\208\181\208\187\209\140\209\142" or "\208\157\208\181\208\187\209\140\208\183\209\143 \208\178\209\139\208\177\208\184\209\128\208\176\209\130\209\140 \209\134\208\181\208\187\209\140\209\142",W,function() e.targetable=not e.targetable draw() end)
   if t.linked_sheet then rows[#rows+1]=label("\208\165\208\159 \209\129\208\178\209\143\208\183\208\176\208\189\209\139 \209\129 \208\187\208\184\209\129\209\130\208\190\208\188 \208\184\208\179\209\128\208\190\208\186\208\176",W,13,"#A0A6B2") end
@@ -293,8 +297,10 @@ local function sceneEditorUI()
   if not name or not name:match("%S") then status("\208\146\208\178\208\181\208\180\208\184\209\130\208\181 \208\184\208\188\209\143 \209\131\209\135\208\176\209\129\209\130\208\189\208\184\208\186\208\176") return end
   if t then
    local hp,max,temp=tonumber(S.draft.sceneHP),tonumber(S.draft.sceneMax),tonumber(S.draft.sceneTemp)
-   if not hp or not max or not temp or hp%1~=0 or max%1~=0 or temp%1~=0 or hp<0 or max<1 or hp>max or max>1000000 or temp<0 or temp>1000000 then status("\208\159\209\128\208\190\208\178\208\181\209\128\209\140\209\130\208\181 \208\165\208\159: \209\134\208\181\208\187\209\139\208\181 \209\135\208\184\209\129\208\187\208\176, \209\130\208\181\208\186\209\131\209\137\208\184\208\181 \208\189\208\181 \208\177\208\190\208\187\209\140\209\136\208\181 \208\188\208\176\208\186\209\129\208\184\208\188\208\176\208\187\209\140\208\189\209\139\209\133") return end
-   sendScene({command="update",target=t.id,version=t.version,name=name,hp_current=hp,hp_max=max,hp_temp=temp,visible=e.visible,targetable=e.targetable,defenses=e.defenses})
+   if not t.sheet_character and (not hp or not max or not temp or hp%1~=0 or max%1~=0 or temp%1~=0 or hp<0 or max<1 or hp>max or max>1000000 or temp<0 or temp>1000000) then status("\208\159\209\128\208\190\208\178\208\181\209\128\209\140\209\130\208\181 \208\165\208\159: \209\134\208\181\208\187\209\139\208\181 \209\135\208\184\209\129\208\187\208\176, \209\130\208\181\208\186\209\131\209\137\208\184\208\181 \208\189\208\181 \208\177\208\190\208\187\209\140\209\136\208\181 \208\188\208\176\208\186\209\129\208\184\208\188\208\176\208\187\209\140\208\189\209\139\209\133") return end
+   local body={command="update",target=t.id,version=t.version,name=name,visible=e.visible,targetable=e.targetable,defenses=e.defenses}
+   if not t.sheet_character then body.hp_current=hp body.hp_max=max body.hp_temp=temp end
+   sendScene(body)
   else
    local count=e.source.kind=="player" and 1 or tonumber(S.draft.sceneCount)
    if not count or count%1~=0 or count<1 or count>20 then status("\208\154\208\190\208\187\208\184\209\135\208\181\209\129\209\130\208\178\208\190 NPC: 1\226\128\16620") return end
@@ -319,17 +325,50 @@ local function sceneUI()
    end
   end
  else rows[#rows+1]=label("\208\151\208\176\209\137\208\184\209\130\209\139 \208\184 \208\183\208\180\208\190\209\128\208\190\208\178\209\140\208\181 \208\189\208\176\209\129\209\130\209\128\208\176\208\184\208\178\208\176\208\181\209\130 \208\188\208\176\209\129\209\130\208\181\209\128. \208\165\208\159 \209\134\208\181\208\187\208\181\208\185 \209\129\208\186\209\128\209\139\209\130\209\139.",W,13,"#A0A6B2") end
- for _,t in ipairs(d.targets or {}) do
-  local target=t
-  local content={label(t.linked_sheet and "\208\155\208\152\208\161\208\162 \208\152\208\147\208\160\208\158\208\154\208\144" or "\208\163\208\167\208\144\208\161\208\162\208\157\208\152\208\154 \208\161\208\166\208\149\208\157\208\171",C,10,"#858D9F"),label(t.name,C,21)}
+ local function appendTarget(t, copies)
+  local content={label(copies and "\208\155\208\152\208\161\208\162 \208\173\208\154\208\151\208\149\208\156\208\159\208\155\208\175\208\160\208\144" or t.linked_sheet and "\208\155\208\152\208\161\208\162 \208\152\208\147\208\160\208\158\208\154\208\144" or "\208\163\208\167\208\144\208\161\208\162\208\157\208\152\208\154 \208\161\208\166\208\149\208\157\208\171",C,10,"#858D9F"),label(t.name,C,21)}
   if d.master_view then
    content[#content+1]=label("\208\165\208\159 "..fmt(t.hp_current).." / "..fmt(t.hp_max).."    + "..fmt(t.hp_temp).." \208\178\209\128\208\181\208\188\208\181\208\189\208\189\209\139\209\133",C,19,"#B3A9FF")
    content[#content+1]=label((t.visible and "\208\146\208\184\208\180\208\181\208\189 \208\184\208\179\209\128\208\190\208\186\208\176\208\188" or "\208\161\208\186\209\128\209\139\209\130 \208\190\209\130 \208\184\208\179\209\128\208\190\208\186\208\190\208\178").." \194\183 "..(t.targetable and "\208\148\208\190\209\129\209\130\209\131\208\191\208\181\208\189 \208\186\208\176\208\186 \209\134\208\181\208\187\209\140" or "\208\157\208\181\208\187\209\140\208\183\209\143 \208\178\209\139\208\177\209\128\208\176\209\130\209\140 \209\134\208\181\208\187\209\140\209\142"),C,12,"#A0A6B2")
-   content[#content+1]=row({button("\208\157\208\176\209\129\209\130\209\128\208\190\208\184\209\130\209\140",264,function() editScene(target,nil) end),gap(),button(S.removeTarget==t.id and "\208\159\208\190\208\180\209\130\208\178\208\181\209\128\208\180\208\184\209\130\209\140 \209\131\208\180\208\176\208\187\208\181\208\189\208\184\208\181" or "\208\163\208\177\209\128\208\176\209\130\209\140 \208\184\208\183 \209\129\209\134\208\181\208\189\209\139",264,function()
-    if S.removeTarget==target.id then sendScene({command="update",target=target.id,version=target.version,active=false}) else S.removeTarget=target.id draw() end
+   if copies then
+    content[#content+1]=button("\208\158\209\130\208\186\209\128\209\139\209\130\209\140 \208\187\208\184\209\129\209\130",C,function()
+     local sheet=rawget(_G,"SLsheet")
+     if sheet and type(sheet.openSceneSheet)=="function" then
+      sheet.openSceneSheet(copies,t.sheet_character.id)
+     else
+      status("\208\163\209\129\209\130\208\176\208\189\208\190\208\178\208\184\209\130\208\181 \208\190\208\177\208\189\208\190\208\178\208\187\209\145\208\189\208\189\209\139\208\185 \208\188\208\190\208\180 SessionLab \194\183 \208\187\208\184\209\129\209\130")
+     end
+    end,true)
+   end
+   content[#content+1]=row({button("\208\157\208\176\209\129\209\130\209\128\208\190\208\184\209\130\209\140",264,function() editScene(t,nil) end),gap(),button(S.removeTarget==t.id and "\208\159\208\190\208\180\209\130\208\178\208\181\209\128\208\180\208\184\209\130\209\140 \209\131\208\180\208\176\208\187\208\181\208\189\208\184\208\181" or "\208\163\208\177\209\128\208\176\209\130\209\140 \208\184\208\183 \209\129\209\134\208\181\208\189\209\139",264,function()
+    if S.removeTarget==t.id then sendScene({command="update",target=t.id,version=t.version,active=false}) else S.removeTarget=t.id draw() end
    end)},C)
   end
   rows[#rows+1]=card(content)
+ end
+ local groups, order = {}, {}
+ for _,t in ipairs(d.targets or {}) do
+  if d.master_view and t.sheet_character then
+   local source=t.source
+   if not groups[source] then groups[source]={} order[#order+1]=source end
+   local group=groups[source]
+   group[#group+1]=t
+  else
+   appendTarget(t)
+  end
+ end
+ for _,source in ipairs(order) do
+  local group=groups[source]
+  local opened=S.sceneGroup==source
+  rows[#rows+1]=button((opened and "\226\136\146 " or "+ ")..group[1].source_name.." \194\183 "..fmt(#group).." \208\178 \209\129\209\134\208\181\208\189\208\181",W,function()
+   if opened then S.sceneGroup=nil else S.sceneGroup=source end
+   draw()
+  end,true)
+  if opened then
+   local copies={}
+   for _,target in ipairs(group) do copies[#copies+1]=target.sheet_character end
+   for _,target in ipairs(group) do appendTarget(target,copies) end
+  end
  end
  if #(d.targets or {})==0 then rows[#rows+1]=label("\208\146 \209\129\209\134\208\181\208\189\208\181 \208\191\208\190\208\186\208\176 \208\189\208\181\209\130 \209\131\209\135\208\176\209\129\209\130\208\189\208\184\208\186\208\190\208\178",W,14,"#A0A6B2") end
  return column(rows)

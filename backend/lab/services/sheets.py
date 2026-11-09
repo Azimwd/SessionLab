@@ -64,8 +64,15 @@ CONDITIONS = [
 def controlled_character(campaign, user, pk):
     if type(pk) not in [str, int] or not str(pk).isdigit():
         raise ValidationError("Выберите персонажа")
-    char = get_object_or_404(Character, campaign=campaign, pk=int(pk), active=True)
-    if char.owner_id != user.pk and not is_dm(campaign, user):
+    char = get_object_or_404(
+        Character.objects.select_related('scene_copy__session'),
+        campaign=campaign, pk=int(pk), active=True,
+    )
+    copy = getattr(char, 'scene_copy', None)
+    master = is_dm(campaign, user) if copy or char.owner_id != user.pk else False
+    if copy and (not master or not copy.active or copy.session.status != 'active'):
+        raise PermissionDenied("Лист экземпляра доступен мастеру в активной сцене")
+    if char.owner_id != user.pk and not master:
         raise PermissionDenied("Управлять листом может владелец или мастер")
     return char
 

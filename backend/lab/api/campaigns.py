@@ -33,7 +33,7 @@ def number(value):
 
 def own_character(request, campaign, pk, dm=False):
     character = get_object_or_404(
-        Character, pk=number(pk), campaign=campaign, active=True
+        Character, pk=number(pk), campaign=campaign, active=True, scene_copy__isnull=True
     )
     if character.owner_id != request.user.pk and not dm:
         raise PermissionDenied("Это чужой персонаж")
@@ -165,7 +165,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
         if getattr(self, "swagger_fake_view", False):
             return Character.objects.none()
         campaign = campaign_for(self.request)
-        qs = Character.objects.filter(campaign=campaign, active=True)
+        qs = Character.objects.filter(campaign=campaign, active=True, scene_copy__isnull=True)
         if not is_dm(campaign, self.request.user):
             # Public table cards come from RoomView after folder/leaf checks.
             # Full character metadata remains private to its owner and masters.

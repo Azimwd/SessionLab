@@ -8,6 +8,7 @@ const mocks=vi.hoisted(()=>({master:false,mutate:vi.fn(),targets:[] as any[],req
 vi.mock('../../app',()=>({useApp:()=>({masterMode:mocks.master,cid:'1',sid:'1',user:{id:1},refresh:vi.fn(),notify:vi.fn()}),
  useData:(path:string)=>{mocks.paths.push(path);return ({data:path.startsWith('/scene/targets/')?{targets:mocks.targets,damage_types:{fire:'Огонь',cold:'Холод'}}:mocks.history??mocks.requests,isPending:false})},
  useAction:()=>({mutate:mocks.mutate,isPending:false,error:null})}));
+vi.mock('../sheets/SheetEditor',()=>({default:({character}:{character:{id:number}})=><p>Открыт лист {character.id}</p>}));
 afterEach(cleanup);
 beforeEach(()=>{mocks.master=false;mocks.mutate.mockReset();mocks.requests=[];mocks.history=null;mocks.paths=[];mocks.targets=[{id:1,name:'Стражник № 1',targetable:true,hp_current:19,hp_max:40,visible:true},{id:2,name:'Стражник № 2',targetable:true,hp_current:40,hp_max:40,visible:true}];});
 it('players see identities without HP or management, even if a cached object contained health',()=>{
@@ -155,4 +156,26 @@ it('can decline a rolled rider on a particular hit without altering damage value
  fireEvent.click(screen.getByLabelText(/Удар Суда · \+7/));
  fireEvent.click(screen.getByText('Нанести урон (1)'));
  expect(mocks.mutate.mock.calls[0][0].body.outcomes['1']).toEqual({effects:[],hit:true});
+});
+
+
+it('opens NPC copies under their template and switches between independent sheets',async()=>{
+  mocks.master=true;
+  mocks.targets=mocks.targets.map(t=>({
+    ...t,source:3,source_name:'Стражник',sheet_character:{id:100+t.id,name:t.name},
+  }));
+  const {rerender}=render(<Scene characters={[]}/>);
+  expect(screen.getByText('Листов в сцене: 2')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Открыть листы'}));
+  expect(await screen.findByText('Открыт лист 101')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Стражник № 2 · 40/40 ХП'}));
+  expect(screen.getByText('Открыт лист 102')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Убрать из сцены'}));
+  expect(mocks.mutate.mock.calls[0][0]).toMatchObject({
+    path:'/scene/targets/2/?campaign=1',body:{active:false},
+  });
+  mocks.targets=mocks.targets.slice(0,1);
+  rerender(<Scene characters={[]}/>);
+  expect(screen.getByText('Открыт лист 101')).toBeInTheDocument();
+  expect(screen.queryByText('Открыт лист 102')).not.toBeInTheDocument();
 });

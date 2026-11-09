@@ -145,3 +145,21 @@ check(S.window) find(S.window,'Нанести урон · 1 целей').press()
 assert(#post.data.outcomes['1'].effects==0 and post.data.outcomes['1'].hit==true)
 Commands.slroom('close')
 print('PASS: native damage outcomes, target identity privacy, single attack target, retries, sheet handoff and master defenses')
+
+-- Group copies of one template and pass their individual sheet IDs to the sheet window.
+Commands.slroom('open')
+room.role='dm' room.master_view=true get.success({data=room})
+find(S.window,'Участники').press()
+scene.master_view=true
+scene.targets={
+ {id=1,source=30,source_name='Guard',name='Guard 1',hp_current=12,hp_max=20,sheet_character={id=101,name='Guard 1'}},
+ {id=2,source=30,source_name='Guard',name='Guard 2',hp_current=20,hp_max=20,sheet_character={id=102,name='Guard 2'}},
+}
+get.success({data=scene})
+assert(not find(S.window,'Открыть лист'))
+find(S.window,'+ Guard · 2 в сцене').press()
+local chosen, siblings
+rawset(_G,'SLsheet',{openSceneSheet=function(copies,id) siblings=copies chosen=id end})
+find(S.window,'Открыть лист').press()
+assert(chosen==101 and siblings[2].id==102)
+Commands.slroom('close')
