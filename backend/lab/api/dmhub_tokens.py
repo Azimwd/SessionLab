@@ -173,6 +173,7 @@ def resolve_action(campaign, user, ability, level, targets, master, game, *, leg
                     check['chosen'] != 1 and check['total'] >= sheet.armor_class
                 )
             save = part.get('save') if not healing else None
+            saving_throw = None
             if 'damage' in part:
                 if save:
                     outcome['save_outcome'] = 'roll'
@@ -181,6 +182,7 @@ def resolve_action(campaign, user, ability, level, targets, master, game, *, leg
                     is_attack=check is not None,
                 )
                 apply_damage(application, campaign, user, outcome, privileged=True, emit_event=False)
+                saving_throw = application.resolution.get('save_roll')
                 outcome = {
                     key: application.resolution[key] for key in ('hit', 'save_outcome')
                     if application.resolution.get(key) is not None
@@ -188,6 +190,8 @@ def resolve_action(campaign, user, ability, level, targets, master, game, *, leg
             elif save:
                 saving_throw = d20(computed(sheet)['saves'][save['ability']])
                 outcome['save_outcome'] = 'success' if saving_throw['total'] >= save['dc'] else 'failure'
+            if saving_throw is not None:
+                outcome.update(save_total=saving_throw['total'], save_dc=save['dc'])
             summary['parts'].append(outcome)
     if single:
         roll.payload['token_target'] = summaries[0]

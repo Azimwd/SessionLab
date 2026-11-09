@@ -29,10 +29,15 @@ export function RollResult({ event, large = false, allowApply = false }: { event
     {targets.map((target:Json) => <p key={target.id} className="save-callout">
       Цель: <b>{target.name}</b>.{' '}
       {target.resolved
-        ? target.parts.map((part:Json) => part.hit === false ? 'Промах'
-          : part.hit === true ? 'Попадание'
-          : part.save_outcome === 'success' ? 'Спасбросок пройден'
-          : part.save_outcome === 'failure' ? 'Спасбросок провален' : 'Применено').join(' · ')
+        ? target.parts.map((part:Json) => {
+          if (part.save_outcome === 'success' || part.save_outcome === 'failure') {
+            const outcome = part.save_outcome === 'success' ? 'пройден' : 'провален';
+            const score = part.save_total != null && part.save_dc != null
+              ? ` (${part.save_total} против СЛ ${part.save_dc})` : '';
+            return `Спасбросок ${outcome}${score}`;
+          }
+          return part.hit === false ? 'Промах' : part.hit === true ? 'Попадание' : 'Применено';
+        }).join(' · ')
         : 'Эффект определяется по описанию.'}
     </p>)}
     {p.map_resolved && !targets.length && <p className="save-callout">В области нет привязанных целей.</p>}
