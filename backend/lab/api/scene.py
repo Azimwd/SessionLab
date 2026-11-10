@@ -106,14 +106,18 @@ def create_targets(c, user, data):
     s = active_session(c)
     source = get_object_or_404(Character, campaign=c, active=True, scene_copy__isnull=True, pk=integer(data.get('source'), 'Лист', 1, 9223372036854775807))
     count = integer(data.get('count', 1), 'Количество', 1, 20)
+    targets = create_scene_targets(s, source, count, str(data.get('name') or source.name).strip(),
+                                   defenses(data.get('defenses', {})))
+    return {'targets': [target_data(t, True) for t in targets]}
+
+
+def create_scene_targets(s, source, count, base, protection):
     linked = source.kind == 'player'
     if linked and (count != 1 or SceneTarget.objects.filter(session=s, source=source, linked_sheet=True, active=True).exists()):
         raise ValidationError('Персонаж игрока уже в сцене или выбрано несколько экземпляров')
     if SceneTarget.objects.filter(session=s, active=True).count()+count > 200:
         raise ValidationError('В сцене может быть не более 200 целей')
     sh = sheet_for(source)
-    protection = defenses(data.get('defenses', {}))
-    base = str(data.get('name') or source.name).strip()
     if not base or len(base)>85:
         raise ValidationError('Имя цели: от 1 до 85 символов')
     used = set(SceneTarget.objects.filter(
@@ -135,9 +139,9 @@ def create_targets(c, user, data):
             scene_number=None if linked else number, hp_max=sh.hp_max,
             hp_current=sh.hp_current if primary else sh.hp_max, defenses=protection,
         )
-        created.append(target_data(t, True))
+        created.append(t)
         used.add(number)
-    return {'targets': created}
+    return created
 
 
 class SceneTargets(APIView):

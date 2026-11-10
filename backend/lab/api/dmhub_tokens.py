@@ -1,14 +1,16 @@
 """Map bindings and transactional DMHub action resolution."""
 
 import re
+from collections import defaultdict
 
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
-from lab.models import CharacterAbility, DamageApplication, SceneTarget
+from lab.models import Character, CharacterAbility, DamageApplication, DMHubTokenBinding, SceneTarget
 from lab.services.dice import d20
 from lab.services.map_actions import map_targeting
 from lab.services.sheets import active_session, computed, controlled_character, use_ability
@@ -16,7 +18,7 @@ from lab.services.sheets import active_session, computed, controlled_character, 
 from .common import is_dm
 from .dmhub_edit import PersonalSheetAPI
 from .dmhub_sheets import access_for, bridge_payload, response_for
-from .scene import apply_damage, effect_kind, integer, target_sheet
+from .scene import apply_damage, create_scene_targets, effect_kind, integer, target_sheet
 from .sheets import EventSerializer
 
 
@@ -63,7 +65,120 @@ def link_target(session, user, master, game, data):
     )
     target.dmhub_game, target.dmhub_token = game, token
     target.save(update_fields=['dmhub_game', 'dmhub_token', 'updated_at'])
+    DMHubTokenBinding.objects.update_or_create(
+        campaign_id=session.campaign_id, game=game, token=token, defaults={'source_id': target.source_id},
+    )
     return {'target': token_row(target, user, master, game)}
+
+
+def roster_sheets(campaign):
+    return Character.objects.filter(campaign=campaign, active=True, scene_copy__isnull=True)
+
+
+def change_binding(campaign, user, game, data):
+    if not is_dm(campaign, user):
+        raise PermissionDenied('Общей привязкой токена управляет мастер')
+    if set(data) - {'command', 'game', 'token', 'sheet'}:
+        raise ValidationError('Неизвестные поля привязки токена')
+    token = identifier(data.get('token'), 'токен DMHub')
+    source_id = integer(data.get('sheet'), 'Лист', 0, 2**63-1)
+    if SceneTarget.objects.filter(
+        session__campaign=campaign, session__status='active', active=True, dmhub_game=game, dmhub_token=token,
+    ).exists():
+        raise ValidationError('Сначала отвяжите токен от текущего участника сцены')
+    bindings = DMHubTokenBinding.objects.filter(campaign=campaign, game=game, token=token)
+    if source_id == 0:
+        bindings.delete()
+        return {'unlinked': True}
+    source = get_object_or_404(roster_sheets(campaign), pk=source_id)
+    bindings.update_or_create(
+        campaign=campaign, game=game, token=token, defaults={'source': source},
+    )
+    return {'binding': {'sheet': source.pk, 'name': source.name}}
+
+
+def enrollment_roster(campaign, game, session):
+    return {
+        'session_name': session.name if session else '',
+        'characters': list(roster_sheets(campaign).order_by('name', 'pk').values('id', 'name', 'kind', 'folder__name')),
+        'bindings': dict(DMHubTokenBinding.objects.filter(
+            campaign=campaign, game=game, source__in=roster_sheets(campaign),
+        ).values_list('token', 'source_id')),
+    }
+
+
+def enroll_tokens(campaign, user, game, data):
+    if not is_dm(campaign, user):
+        raise PermissionDenied('Добавлять токены в сессию может только мастер')
+    if set(data) - {'command', 'game', 'session', 'session_name', 'tokens'}:
+        raise ValidationError('Неизвестные поля добавления токенов')
+    expected = integer(data.get('session'), 'Сессия', 0, 2**63-1)
+    session = campaign.sessions.filter(status='active').first()
+    if expected != (session.pk if session else 0):
+        raise ValidationError('Активная сессия изменилась. Откройте список токенов заново.')
+    chosen = data.get('tokens')
+    if isinstance(chosen, dict) and len(chosen) <= 50:
+        indexes = [str(i) for i in range(1, len(chosen) + 1)]
+        if set(chosen) == set(indexes):
+            chosen = [chosen[i] for i in indexes]
+    if not isinstance(chosen, list) or not 1 <= len(chosen) <= 50:
+        raise ValidationError('Выберите от 1 до 50 токенов')
+    selection = {}
+    for entry in chosen:
+        if not isinstance(entry, dict) or set(entry) - {'token', 'sheet', 'hidden'}:
+            raise ValidationError('Некорректный токен')
+        token = identifier(entry.get('token'), 'токен DMHub')
+        if token in selection or type(entry.get('hidden', False)) is not bool:
+            raise ValidationError('Некорректное выделение токенов')
+        selection[token] = entry
+
+    mapped = {}
+    unlinked = defaultdict(list)
+    if session:
+        for target in rows_for(session).order_by('scene_number', 'pk'):
+            if target.dmhub_game == game and target.dmhub_token:
+                mapped[target.dmhub_token] = target
+            elif not target.dmhub_token and target.uses_sheet:
+                unlinked[target.source_id].append(target)
+    bindings = dict(DMHubTokenBinding.objects.filter(
+        campaign=campaign, game=game, token__in=selection,
+    ).values_list('token', 'source_id'))
+    groups = defaultdict(list)
+    for token, entry in selection.items():
+        if token in mapped:
+            continue
+        source_id = integer(entry.get('sheet', bindings.get(token)), 'Лист', 1, 2**63-1)
+        groups[source_id].append(token)
+    sources = roster_sheets(campaign).in_bulk(groups)
+    if len(sources) != len(groups):
+        raise ValidationError('Один из листов больше недоступен')
+    if not session:
+        name = data.get('session_name')
+        if not isinstance(name, str) or not 1 <= len(name.strip()) <= 120:
+            raise ValidationError('Введите название новой сессии')
+        session = campaign.sessions.create(name=name.strip(), date=timezone.now(), status='active')
+
+    results = {token: {'id': mapped[token].pk, 'name': mapped[token].name, 'added': False}
+               for token in selection if token in mapped}
+    for source_id, tokens in groups.items():
+        source = sources[source_id]
+        available = unlinked[source_id][:len(tokens)]
+        count = len(tokens) - len(available)
+        if count:
+            available += create_scene_targets(session, source, count, source.name.strip()[:85], {})
+        for token, target in zip(tokens, available):
+            target.dmhub_game, target.dmhub_token = game, token
+            fields = ['dmhub_game', 'dmhub_token', 'updated_at']
+            if selection[token].get('hidden') and target.visible:
+                target.visible = False
+                target.version += 1
+                fields += ['visible', 'version']
+            target.save(update_fields=fields)
+            DMHubTokenBinding.objects.update_or_create(
+                campaign=campaign, game=game, token=token, defaults={'source_id': source_id},
+            )
+            results[token] = {'id': target.pk, 'name': target.name, 'added': True}
+    return {'session': session.pk, 'targets': [results[token] for token in selection]}
 
 
 def cast_spell(campaign, user, session, master, game, data):
@@ -211,6 +326,9 @@ class NativeTokenScene(PersonalSheetAPI):
         access = access_for(request)
         game = identifier(request.query_params.get('game'), 'игра DMHub')
         master = is_dm(access.campaign, access.user)
+        roster = request.query_params.get('roster') == '1'
+        if roster and not master:
+            raise PermissionDenied('Составом сессии управляет мастер')
         session = access.campaign.sessions.filter(status='active').first()
         targets = []
         if session:
@@ -218,16 +336,32 @@ class NativeTokenScene(PersonalSheetAPI):
             if not master:
                 rows = rows.filter(visible=True, dmhub_game=game).exclude(dmhub_token='')
             targets = [token_row(t, access.user, master, game) for t in rows]
-        return Response({
+        result = {
             'session': session.pk if session else None, 'is_dm': master, 'targets': targets, 'map_actions': True,
-        }, headers={'Cache-Control': 'no-store'})
+        }
+        if roster:
+            result['enrollment'] = enrollment_roster(access.campaign, game, session)
+        if master and 'token' in request.query_params:
+            token = identifier(request.query_params['token'], 'токен DMHub')
+            binding = DMHubTokenBinding.objects.filter(
+                campaign=access.campaign, game=game, token=token, source__active=True,
+            ).values_list('source_id', 'source__name').first()
+            if binding:
+                result['binding'] = {'sheet': binding[0], 'name': binding[1]}
+        return Response(result, headers={'Cache-Control': 'no-store'})
 
     @extend_schema(request=OpenApiTypes.OBJECT, responses=OpenApiTypes.OBJECT)
     def post(self, request):
         access, data = access_for(request), bridge_payload(request)
         game = identifier(data.get('game'), 'игра DMHub')
+        if data.get('command') in ('bind', 'enroll') and not is_dm(access.campaign, access.user):
+            raise PermissionDenied('Составом сессии и привязками управляет мастер')
 
         def operation(campaign, user):
+            if data.get('command') == 'enroll':
+                return enroll_tokens(campaign, user, game, data)
+            if data.get('command') == 'bind':
+                return change_binding(campaign, user, game, data)
             session = active_session(campaign)
             if type(data.get('session')) is not int or data['session'] != session.pk:
                 raise ValidationError('Игровая сессия изменилась. Выберите цель заново.')

@@ -131,6 +131,18 @@ class Character(Timestamped):
         ]
 
 
+class DMHubTokenBinding(models.Model):
+    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE)
+    game = models.CharField(max_length=128)
+    token = models.CharField(max_length=128)
+    source = models.ForeignKey(Character, on_delete=models.CASCADE)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['campaign', 'game', 'token'], name='dmhub_game_token_binding'),
+        ]
+
+
 class GameSession(Timestamped):
     campaign = models.ForeignKey(
         Campaign, on_delete=models.PROTECT, related_name="sessions"
