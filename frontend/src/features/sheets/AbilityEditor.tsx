@@ -3,6 +3,7 @@ import { useApp, useAction } from '../../app';
 import { Button, Field, Modal, ErrorBox } from '../../components/ui';
 import type { Json } from '../../api/client';
 import { AttackEffectsEditor } from './AttackEffects';
+import { DmhubIconPicker } from './DmhubIconPicker';
 import { abilities } from './constants';
 
 export default function AbilityEditor({characterId, initial, kind, onClose, spellAbility}: {characterId:number; initial?:Json; kind:'attack'|'spell';onClose:()=>void;spellAbility:string}) {
@@ -49,9 +50,9 @@ export default function AbilityEditor({characterId, initial, kind, onClose, spel
             <option value="frost">Холод</option><option value="healing">Лечение</option><option value="lightning">Молния</option><option value="weapon">Оружие</option>
           </select>
         </Field>
-        <Field label="Своя иконка DMHub" hint="Ключ изображения или путь к PNG в game-icons / ui-icons.">
-          <input value={v.map_settings?.icon_asset||''} maxLength={160} onChange={e=>set('map_settings',{...v.map_settings,icon_asset:e.target.value.trim()})}/>
-        </Field>
+        <DmhubIconPicker value={v.map_settings?.icon_asset || ''} onChange={icon_asset=>
+          setV(old=>({...old,map_settings:{...old.map_settings,icon_asset}}))
+        }/>
         <Field label="Визуальный эффект">
           <select value={v.map_settings?.effect||'auto'} onChange={e=>set('map_settings',{...v.map_settings,effect:e.target.value})}>
             <option value="auto">По типу действия</option><option value="none">Выключен</option><option value="fire">Огонь</option><option value="custom">Свой эффект DMHub</option>
