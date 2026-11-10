@@ -1,6 +1,6 @@
 import { useId, useRef, useState } from 'react';
 import {
-  Check, createLucideIcon, GitFork, Heart, Image as ImageIcon, Info, Sword,
+  Check, createLucideIcon, Heart, Image as ImageIcon, Sword,
   type LucideIcon,
 } from 'lucide-react';
 import { Button, Field } from '../../components/ui';
@@ -13,6 +13,8 @@ type IconEntry = {
   keywords?: string[];
   file?: string;
   glyph?: LucideIcon;
+  category?: string;
+  background?: string;
 };
 
 const Dice20 = createLucideIcon('Dice20', [
@@ -24,19 +26,22 @@ const starterIcons: IconEntry[] = [
   { asset: 'ui-icons/heartclicked.png', name: 'Сердце', keywords: ['лечение', 'исцеление', 'здоровье', 'хиты'], glyph: Heart },
   { asset: 'ui-icons/skills/melee-attack-icon.png', name: 'Атака оружием', keywords: ['меч', 'клинок', 'ближний бой', 'удар'], glyph: Sword },
   { asset: 'ui-icons/d20.png', name: 'Кубик d20', keywords: ['навык', 'проверка', 'бросок', 'кости'], glyph: Dice20 },
-  { asset: 'ui-icons/ph-arrows-split-fill.png', name: 'Разветвлённая стрелка', keywords: ['молния', 'электричество', 'луч', 'цепь'], glyph: GitFork },
   { asset: 'ui-icons/module-checkmark.png', name: 'Галочка', keywords: ['успех', 'спасбросок', 'проверка'], glyph: Check },
-  { asset: 'ui-icons/ph-info-fill.png', name: 'Информация', keywords: ['характеристика', 'подсказка', 'знание'], glyph: Info },
 ];
 
-type PreviewEntry = Required<Pick<IconEntry, 'asset' | 'name' | 'file'>> & Pick<IconEntry, 'keywords'>;
+type PreviewEntry = Required<Pick<IconEntry, 'asset' | 'name' | 'file'>> & Pick<IconEntry, 'keywords' | 'category' | 'background'>;
 const byAsset = new Map(starterIcons.map(icon => [icon.asset, icon]));
 for (const icon of customPreviews as PreviewEntry[]) {
-  byAsset.set(icon.asset, { ...byAsset.get(icon.asset), ...icon });
+  const existing = byAsset.get(icon.asset);
+  byAsset.set(icon.asset, { ...existing, ...icon, keywords: [...(existing?.keywords ?? []), ...(icon.keywords ?? [])] });
 }
 
 const normalize = (text: string) => text.toLocaleLowerCase('ru').replaceAll('ё', 'е');
-const catalog = [...byAsset.values()].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+const catalog = [...byAsset.values()].map(icon => ({
+  ...icon,
+  searchText: normalize([icon.name, ...(icon.keywords ?? []), icon.asset].join(' ')),
+})).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+const categories = [...new Set(catalog.map(icon => icon.category).filter((category): category is string => Boolean(category)))].sort((a, b) => a.localeCompare(b, 'ru'));
 const PAGE_SIZE = 24;
 
 function IconPreview({ icon }: { icon: IconEntry }) {
@@ -44,7 +49,7 @@ function IconPreview({ icon }: { icon: IconEntry }) {
   const Glyph = icon.glyph ?? ImageIcon;
   return <span className="dmhub-icon-preview">
     {icon.file && !failed
-      ? <img src={`/dmhub-icons/${encodeURIComponent(icon.file)}`} loading="lazy" alt="" onError={() => setFailed(true)} />
+      ? <img src={`/dmhub-icons/${encodeURIComponent(icon.file)}`} loading="lazy" decoding="async" alt="" onError={() => setFailed(true)} />
       : <Glyph aria-hidden="true" />}
   </span>;
 }
@@ -54,13 +59,22 @@ export function DmhubIconPicker({ value, onChange }: { value: string; onChange: 
   const toggle = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [limit, setLimit] = useState(PAGE_SIZE);
+  const [page, setPage] = useState(0);
+  const [category, setCategory] = useState('');
+  const [background, setBackground] = useState('');
+  const grid = useRef<HTMLDivElement>(null);
   const selected = byAsset.get(value);
   const words = normalize(query).trim().split(/\s+/);
   const matches = open ? catalog.filter(icon => {
-    const haystack = normalize([icon.name, ...(icon.keywords ?? []), icon.asset].join(' '));
-    return words.every(word => haystack.includes(word));
+    if (category && icon.category !== category) return false;
+    if (background && icon.background !== background) return false;
+    return words.every(word => icon.searchText.includes(word));
   }) : [];
+  const pages = Math.max(1, Math.ceil(matches.length / PAGE_SIZE));
+  const goToPage = (next: number) => {
+    setPage(next);
+    if (grid.current) grid.current.scrollTop = 0;
+  };
 
   return <div className="dmhub-icon-picker">
     <Field label="Иконка из DMHub" hint="Можно выбрать из галереи или указать путь к PNG или ID изображения вручную.">
@@ -79,21 +93,41 @@ export function DmhubIconPicker({ value, onChange }: { value: string; onChange: 
       <Field label="Поиск иконок">
         <input type="search" autoFocus value={query} placeholder="Например, лечение или меч" onChange={event => {
           setQuery(event.target.value);
-          setLimit(PAGE_SIZE);
+          goToPage(0);
         }} />
       </Field>
-      <p className="muted">Для иконок без PNG показаны условные значки.</p>
-      {matches.length ? <div className="dmhub-icon-grid">
-        {matches.slice(0, limit).map(icon => <button key={icon.asset} className="dmhub-icon-choice" type="button"
+      <div className="dmhub-icon-filters">
+        <Field label="Группа иконок">
+          <select value={category} onChange={event => { setCategory(event.target.value); goToPage(0); }}>
+            <option value="">Все группы</option>
+            {categories.map(group => <option key={group} value={group}>{group}</option>)}
+          </select>
+        </Field>
+        <Field label="Оформление иконки">
+          <select value={background} onChange={event => { setBackground(event.target.value); goToPage(0); }}>
+            <option value="">Все варианты</option>
+            <option value="painted">С фоном</option>
+            <option value="none">Без фона</option>
+          </select>
+        </Field>
+      </div>
+      <p className="muted" aria-live="polite">Найдено: {matches.length}. Русские названия описывают изображение.</p>
+      {matches.length ? <div ref={grid} className="dmhub-icon-grid">
+        {matches.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map(icon => <button key={icon.asset} className="dmhub-icon-choice" type="button"
           aria-pressed={icon.asset === value} title={icon.asset} onClick={() => {
             onChange(icon.asset);
             setOpen(false);
             toggle.current?.focus();
           }}>
           <IconPreview icon={icon} /><span>{icon.name}</span>
+          {icon.background && <small className="muted">{icon.background === 'none' ? 'Без фона' : 'С фоном'}</small>}
         </button>)}
       </div> : <p role="status" className="muted">Иконки не найдены. Попробуйте другое слово.</p>}
-      {matches.length > limit && <Button type="button" variant="ghost" onClick={() => setLimit(limit + PAGE_SIZE)}>Показать ещё</Button>}
+      {pages > 1 && <nav className="dmhub-icon-pagination" aria-label="Страницы иконок">
+        <Button type="button" variant="ghost" disabled={page === 0} onClick={() => goToPage(page - 1)}>Назад</Button>
+        <span>Страница {page + 1} из {pages}</span>
+        <Button type="button" variant="ghost" disabled={page + 1 === pages} onClick={() => goToPage(page + 1)}>Далее</Button>
+      </nav>}
     </section>}
   </div>;
 }

@@ -15,7 +15,12 @@ vi.mock('./dmhub-icon-previews.json', () => ({
     name: 'Магический щит',
     keywords: ['защита', 'барьер'],
     file: 'shield.png',
-  }],
+    category: 'Защита',
+    background: 'painted',
+  }, ...Array.from({ length: 25 }, (_, i) => ({
+    asset: `ui-icons/skills/test_${i}.png`, name: `Пример ${String(i + 1).padStart(2, '0')}`,
+    file: `test_${i}.webp`, category: 'Приёмы', background: 'none',
+  }))],
 }));
 
 
@@ -38,7 +43,7 @@ it('renders the configured preview and saves the DMHub asset key', () => {
   render(<AbilityEditor characterId={1} kind="spell" spellAbility="cha" onClose={() => {}} />);
   fireEvent.click(screen.getByRole('button', { name: 'Выбрать иконку' }));
   fireEvent.change(screen.getByRole('searchbox', { name: 'Поиск иконок' }), { target: { value: 'магический барьер' } });
-  const choice = screen.getByRole('button', { name: 'Магический щит' });
+  const choice = screen.getByRole('button', { name: 'Магический щит С фоном' });
   expect(choice.querySelector('img')).toHaveAttribute('src', '/dmhub-icons/shield.png');
   fireEvent.click(choice);
   expect(screen.getByLabelText(/Иконка из DMHub/)).toHaveValue('ui-icons/skills/1.png');
@@ -46,6 +51,26 @@ it('renders the configured preview and saves the DMHub asset key', () => {
   expect(mocks.mutate).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: 'Сбросить иконку' }));
   expect(screen.getByLabelText(/Иконка из DMHub/)).toHaveValue('');
+});
+
+it('pages through a large group and resets the page when the search or variant changes', () => {
+  render(<AbilityEditor characterId={1} kind="spell" spellAbility="cha" onClose={() => {}} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Выбрать иконку' }));
+  const gallery = screen.getByRole('region', { name: 'Галерея иконок DMHub' });
+  fireEvent.change(within(gallery).getByLabelText('Группа иконок'), { target: { value: 'Приёмы' } });
+  expect(within(gallery).getAllByRole('button', { name: /^Пример/ })).toHaveLength(24);
+  expect(within(gallery).getByRole('button', { name: 'Назад' })).toBeDisabled();
+  fireEvent.click(within(gallery).getByRole('button', { name: 'Далее' }));
+  expect(within(gallery).getAllByRole('button', { name: /^Пример/ })).toHaveLength(1);
+  expect(within(gallery).getByRole('button', { name: 'Пример 25 Без фона' })).toBeInTheDocument();
+  fireEvent.change(within(gallery).getByRole('searchbox'), { target: { value: 'Пример 01' } });
+  expect(within(gallery).getByRole('button', { name: 'Пример 01 Без фона' })).toBeInTheDocument();
+  fireEvent.change(within(gallery).getByLabelText('Оформление иконки'), { target: { value: 'painted' } });
+  expect(within(gallery).getByRole('status')).toHaveTextContent('Иконки не найдены');
+  fireEvent.change(within(gallery).getByRole('searchbox'), { target: { value: '' } });
+  fireEvent.change(within(gallery).getByLabelText('Группа иконок'), { target: { value: 'Защита' } });
+  fireEvent.click(within(gallery).getByRole('button', { name: 'Магический щит С фоном' }));
+  expect(screen.getByLabelText(/Иконка из DMHub/)).toHaveValue('ui-icons/skills/1.png');
 });
 
 it('keeps an existing DMHub asset key editable when no preview is available', () => {
