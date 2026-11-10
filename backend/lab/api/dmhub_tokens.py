@@ -10,10 +10,10 @@ from drf_spectacular.utils import extend_schema
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
-from lab.models import Character, CharacterAbility, DamageApplication, DMHubTokenBinding, SceneTarget
+from lab.models import Character, CharacterAbility, DamageApplication, DMHubTokenBinding, InitiativeTracker, SceneTarget
 from lab.services.dice import d20
 from lab.services.map_actions import map_targeting
-from lab.services.sheets import active_session, computed, controlled_character, use_ability
+from lab.services.sheets import active_session, computed, controlled_character, event, use_ability
 
 from .common import is_dm
 from .dmhub_edit import PersonalSheetAPI
@@ -107,6 +107,75 @@ def enrollment_roster(campaign, game, session):
     }
 
 
+def token_selection(chosen, fields):
+    if isinstance(chosen, dict) and len(chosen) <= 50:
+        indexes = [str(i) for i in range(1, len(chosen) + 1)]
+        if set(chosen) == set(indexes):
+            chosen = [chosen[i] for i in indexes]
+    if not isinstance(chosen, list) or not 1 <= len(chosen) <= 50:
+        raise ValidationError('Выберите от 1 до 50 токенов')
+    selection = {}
+    for entry in chosen:
+        if not isinstance(entry, dict) or set(entry) - fields:
+            raise ValidationError('Некорректный токен')
+        token = identifier(entry.get('token'), 'токен DMHub')
+        if token in selection or type(entry.get('hidden', False)) is not bool:
+            raise ValidationError('Некорректное выделение токенов')
+        selection[token] = entry
+    return selection
+
+
+def roll_token_initiative(session, user, targets, *, reveal_hidden=True):
+    # Both the site and the DMHub API hold the campaign lock during initiative writes.
+    tracker, _ = InitiativeTracker.objects.get_or_create(session=session)
+    entries = {}
+    roster = list(tracker.entries.all())
+    for entry in roster:
+        entries.setdefault(entry.player_slot_id or entry.character_id, entry)
+    additions = {target.sheet_character.pk for target in targets} - entries.keys()
+    if len(roster) + len(additions) > 100:
+        raise ValidationError('Лимит: 100 участников инициативы')
+    results = []
+    for target in targets:
+        character = target.sheet_character
+        entry = entries.get(character.pk)
+        if entry and entry.hidden and not reveal_hidden:
+            raise PermissionDenied('Мастер скрыл запись инициативы')
+        rolled = entry is None
+        if rolled:
+            stats = computed(target_sheet(target))
+            result = d20(stats['initiative'])
+            entry = tracker.entries.create(
+                character=character, player_slot=character if character.kind == 'player' else None,
+                name=target.name, initiative=result['total'], dexterity=stats['modifiers']['dex'],
+                hidden=not target.visible,
+            )
+            entries[character.pk] = entry
+            event(session.campaign, session, user, character, 'roll', {
+                'label': 'Инициатива', 'character_name': target.name, 'roll': result,
+            }, visibility='dm' if entry.hidden else 'public')
+        results.append({'id': entry.pk, 'name': entry.name, 'total': entry.initiative, 'rolled': rolled})
+    if additions:
+        tracker.version += 1
+        tracker.save(update_fields=['version', 'updated_at'])
+    return results
+
+
+def token_initiative(session, user, game, data):
+    if set(data) - {'command', 'game', 'session', 'tokens'}:
+        raise ValidationError('Неизвестные поля броска инициативы')
+    selection = token_selection(data.get('tokens'), {'token'})
+    targets = rows_for(session).filter(
+        dmhub_game=game, dmhub_token__in=selection, visible=True, source__kind='player', source__owner=user,
+    )
+    mapped = {target.dmhub_token: target for target in targets if target.uses_sheet}
+    if len(mapped) != len(selection):
+        raise PermissionDenied('Выберите своих персонажей, привязанных к активной сцене')
+    return {'initiative': roll_token_initiative(
+        session, user, [mapped[token] for token in selection], reveal_hidden=False,
+    )}
+
+
 def enroll_tokens(campaign, user, game, data):
     if not is_dm(campaign, user):
         raise PermissionDenied('Добавлять токены в сессию может только мастер')
@@ -116,21 +185,7 @@ def enroll_tokens(campaign, user, game, data):
     session = campaign.sessions.filter(status='active').first()
     if expected != (session.pk if session else 0):
         raise ValidationError('Активная сессия изменилась. Откройте список токенов заново.')
-    chosen = data.get('tokens')
-    if isinstance(chosen, dict) and len(chosen) <= 50:
-        indexes = [str(i) for i in range(1, len(chosen) + 1)]
-        if set(chosen) == set(indexes):
-            chosen = [chosen[i] for i in indexes]
-    if not isinstance(chosen, list) or not 1 <= len(chosen) <= 50:
-        raise ValidationError('Выберите от 1 до 50 токенов')
-    selection = {}
-    for entry in chosen:
-        if not isinstance(entry, dict) or set(entry) - {'token', 'sheet', 'hidden'}:
-            raise ValidationError('Некорректный токен')
-        token = identifier(entry.get('token'), 'токен DMHub')
-        if token in selection or type(entry.get('hidden', False)) is not bool:
-            raise ValidationError('Некорректное выделение токенов')
-        selection[token] = entry
+    selection = token_selection(data.get('tokens'), {'token', 'sheet', 'hidden'})
 
     mapped = {}
     unlinked = defaultdict(list)
@@ -178,7 +233,11 @@ def enroll_tokens(campaign, user, game, data):
                 campaign=campaign, game=game, token=token, defaults={'source_id': source_id},
             )
             results[token] = {'id': target.pk, 'name': target.name, 'added': True}
-    return {'session': session.pk, 'targets': [results[token] for token in selection]}
+    result = {'session': session.pk, 'targets': [results[token] for token in selection]}
+    if data['command'] == 'enroll-initiative':
+        selected = rows_for(session).in_bulk(row['id'] for row in result['targets'])
+        result['initiative'] = roll_token_initiative(session, user, [selected[row['id']] for row in result['targets']])
+    return result
 
 
 def cast_spell(campaign, user, session, master, game, data):
@@ -354,17 +413,20 @@ class NativeTokenScene(PersonalSheetAPI):
     def post(self, request):
         access, data = access_for(request), bridge_payload(request)
         game = identifier(data.get('game'), 'игра DMHub')
-        if data.get('command') in ('bind', 'enroll') and not is_dm(access.campaign, access.user):
+        command = data.get('command')
+        if command in ('bind', 'enroll', 'enroll-initiative') and not is_dm(access.campaign, access.user):
             raise PermissionDenied('Составом сессии и привязками управляет мастер')
 
         def operation(campaign, user):
-            if data.get('command') == 'enroll':
+            if command in ('enroll', 'enroll-initiative'):
                 return enroll_tokens(campaign, user, game, data)
             if data.get('command') == 'bind':
                 return change_binding(campaign, user, game, data)
             session = active_session(campaign)
             if type(data.get('session')) is not int or data['session'] != session.pk:
                 raise ValidationError('Игровая сессия изменилась. Выберите цель заново.')
+            if command == 'initiative':
+                return token_initiative(session, user, game, data)
             master = is_dm(campaign, user)
             if data.get('command') == 'link':
                 return link_target(session, user, master, game, data)
