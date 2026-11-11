@@ -18,7 +18,7 @@ from lab.services.sheets import active_session, computed, controlled_character, 
 from .common import is_dm
 from .dmhub_edit import PersonalSheetAPI
 from .dmhub_sheets import access_for, bridge_payload, response_for
-from .scene import apply_damage, create_scene_targets, effect_kind, integer, target_sheet
+from .scene import apply_damage, create_scene_targets, damage_key, effect_kind, integer, target_sheet
 from .sheets import EventSerializer
 
 
@@ -357,6 +357,12 @@ def resolve_action(campaign, user, ability, level, targets, master, game, *, leg
                 )
                 apply_damage(application, campaign, user, outcome, privileged=True, emit_event=False)
                 saving_throw = application.resolution.get('save_roll')
+                components = application.resolution.get('components', [])
+                if any(
+                    damage_key(component['damage_type']) == 'radiant' and component['final_damage'] > 0
+                    for component in components[1:]
+                ):
+                    summary['visual_radiant'] = True
                 outcome = {
                     key: application.resolution[key] for key in ('hit', 'save_outcome')
                     if application.resolution.get(key) is not None
