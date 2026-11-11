@@ -15,6 +15,7 @@ type IconEntry = {
   glyph?: LucideIcon;
   category?: string;
   background?: string;
+  aliases?: string[];
 };
 
 const Dice20 = createLucideIcon('Dice20', [
@@ -29,17 +30,28 @@ const starterIcons: IconEntry[] = [
   { asset: 'ui-icons/module-checkmark.png', name: 'Галочка', keywords: ['успех', 'спасбросок', 'проверка'], glyph: Check },
 ];
 
-type PreviewEntry = Required<Pick<IconEntry, 'asset' | 'name' | 'file'>> & Pick<IconEntry, 'keywords' | 'category' | 'background'>;
+type PreviewEntry = Required<Pick<IconEntry, 'asset' | 'name' | 'file'>> & Pick<IconEntry, 'keywords' | 'category' | 'background' | 'aliases'>;
 const byAsset = new Map(starterIcons.map(icon => [icon.asset, icon]));
 for (const icon of customPreviews as PreviewEntry[]) {
-  const existing = byAsset.get(icon.asset);
+  const existing = byAsset.get(icon.asset) ?? icon.aliases?.map(alias => byAsset.get(alias)).find(Boolean);
+  for (const alias of icon.aliases ?? []) byAsset.delete(alias);
   byAsset.set(icon.asset, { ...existing, ...icon, keywords: [...(existing?.keywords ?? []), ...(icon.keywords ?? [])] });
+}
+const byKey = new Map<string, IconEntry>();
+const byFoldedKey = new Map<string, IconEntry | false>();
+for (const icon of byAsset.values()) {
+  for (const key of [icon.asset, ...(icon.aliases ?? [])]) {
+    byKey.set(key, icon);
+    const folded = key.toLowerCase();
+    const existing = byFoldedKey.get(folded);
+    byFoldedKey.set(folded, existing === undefined || existing && existing.asset === icon.asset ? icon : false);
+  }
 }
 
 const normalize = (text: string) => text.toLocaleLowerCase('ru').replaceAll('ё', 'е');
 const catalog = [...byAsset.values()].map(icon => ({
   ...icon,
-  searchText: normalize([icon.name, ...(icon.keywords ?? []), icon.asset].join(' ')),
+  searchText: normalize([icon.name, ...(icon.keywords ?? []), icon.asset, ...(icon.aliases ?? [])].join(' ')),
 })).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 const categories = [...new Set(catalog.map(icon => icon.category).filter((category): category is string => Boolean(category)))].sort((a, b) => a.localeCompare(b, 'ru'));
 const PAGE_SIZE = 24;
@@ -63,7 +75,7 @@ export function DmhubIconPicker({ value, onChange }: { value: string; onChange: 
   const [category, setCategory] = useState('');
   const [background, setBackground] = useState('');
   const grid = useRef<HTMLDivElement>(null);
-  const selected = byAsset.get(value);
+  const selected = byKey.get(value) ?? (byFoldedKey.get(value.toLowerCase()) || undefined);
   const words = normalize(query).trim().split(/\s+/);
   const matches = open ? catalog.filter(icon => {
     if (category && icon.category !== category) return false;
@@ -77,7 +89,7 @@ export function DmhubIconPicker({ value, onChange }: { value: string; onChange: 
   };
 
   return <div className="dmhub-icon-picker">
-    <Field label="Иконка из DMHub" hint="Можно выбрать из галереи или указать путь к PNG или ID изображения вручную.">
+    <Field label="Иконка из DMHub" hint="Галерея подставляет ID изображения из библиотеки DMHub. Свой ID или встроенный путь можно указать вручную.">
       <input value={value} maxLength={160} onChange={event => onChange(event.target.value.trim())} />
     </Field>
     <div className="dmhub-icon-actions">
@@ -114,7 +126,7 @@ export function DmhubIconPicker({ value, onChange }: { value: string; onChange: 
       <p className="muted" aria-live="polite">Найдено: {matches.length}. Русские названия описывают изображение.</p>
       {matches.length ? <div ref={grid} className="dmhub-icon-grid">
         {matches.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map(icon => <button key={icon.asset} className="dmhub-icon-choice" type="button"
-          aria-pressed={icon.asset === value} title={icon.asset} onClick={() => {
+          aria-pressed={icon.asset === (selected?.asset ?? value)} title={icon.asset} onClick={() => {
             onChange(icon.asset);
             setOpen(false);
             toggle.current?.focus();
