@@ -357,16 +357,25 @@ def resolve_action(campaign, user, ability, level, targets, master, game, *, leg
                 )
                 apply_damage(application, campaign, user, outcome, privileged=True, emit_event=False)
                 saving_throw = application.resolution.get('save_roll')
-                components = application.resolution.get('components', [])
-                if any(
-                    damage_key(component['damage_type']) == 'radiant' and component['final_damage'] > 0
-                    for component in components[1:]
-                ):
-                    summary['visual_radiant'] = True
                 outcome = {
                     key: application.resolution[key] for key in ('hit', 'save_outcome')
                     if application.resolution.get(key) is not None
                 }
+                # Numeric damage components start with the base hit. Reductions
+                # have a separate field and are not damage dealt by an effect.
+                damage_components = [
+                    component for component in application.resolution.get('components', [])
+                    if 'final_damage' in component
+                ]
+                extra_damage = damage_components[1:]
+                if extra_damage:
+                    outcome['effect_damage'] = [
+                        {'name': component['name'], 'damage': component['final_damage']}
+                        for component in extra_damage
+                    ]
+                    if any(damage_key(component['damage_type']) == 'radiant' and component['final_damage'] > 0
+                           for component in extra_damage):
+                        summary['visual_radiant'] = True
             elif save:
                 saving_throw = d20(computed(sheet)['saves'][save['ability']])
                 outcome['save_outcome'] = 'success' if saving_throw['total'] >= save['dc'] else 'failure'

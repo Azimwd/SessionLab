@@ -186,31 +186,37 @@ def test_targeted_attack_updates_copy_once_without_disclosing_vitals(world):
     }).status_code == 400
 
 
-@pytest.mark.parametrize(('die', 'immune', 'visible_radiant'), [
-    (17, False, True), (0, False, False), (17, True, False),
-])
-def test_map_animation_marks_only_applied_radiant_bonus(world, die, immune, visible_radiant):
+def test_dmhub_reports_only_damage_from_effects_that_triggered(world):
     target, _, cast, player, _ = setup_spell(world, 'attack')
+    target.defenses = {**target.defenses, 'radiant': 'resistance', 'necrotic': 'immunity'}
+    target.save(update_fields=['defenses'])
     attack = CharacterAbility.objects.get(pk=cast['spell'])
-    attack.kind, attack.level = 'attack', 0
-    attack.attack_effects = [{
-        'id': 'smite', 'name': 'Божественная кара', 'dice': '1d8',
-        'damage_type': 'radiant', 'frequency': 'turn', 'enabled': True,
-    }]
-    attack.save(update_fields=['kind', 'level', 'attack_effects'])
-    if immune:
-        target.defenses = {**target.defenses, 'radiant': 'immunity'}
-        target.save(update_fields=['defenses'])
-    with patch('lab.services.dice.secrets.randbelow', return_value=die):
-        response = post(player, ROOT, {
-            'command': 'act', 'session': cast['session'], 'game': GAME,
-            'caster': cast['caster'], 'action': attack.pk, 'action_version': attack.version,
-            'slot_level': 0, 'distance_ft': 5, 'targets': [{'id': target.pk, 'token': cast['token']}],
-        })
+    attack.kind, attack.level, attack.roll_count = 'attack', 0, 3
+    attack.attack_effects = [
+        {'id': 'judgment', 'name': 'Удар Суда', 'dice': '7', 'damage_type': 'radiant', 'frequency': 'turn'},
+        {'id': 'seal', 'name': 'Печать Возмездия', 'dice': '8', 'damage_type': 'necrotic', 'frequency': 'action'},
+        {'id': 'reduction', 'name': 'Снижение урона', 'dice': '2', 'sign': -1, 'frequency': 'action'},
+    ]
+    attack.save()
+    command = {key: cast[key] for key in ('session', 'game', 'caster')}
+    command.update(command='act', action=attack.pk, action_version=attack.version, slot_level=0, distance_ft=5,
+                   targets=[{'token': cast['token'], 'id': target.pk}])
+    with patch('lab.services.dice.secrets.randbelow', side_effect=[0, 17, 17]):
+        response = post(player, ROOT, command, key='chat-effect-damage')
     assert response.status_code == 200, response.json()
     summary = response.json()['data']['event']['payload']['token_target']
-    assert (summary.get('visual_radiant') is True) == visible_radiant
-    assert 'components' not in summary and 'final_damage' not in summary
+    assert summary['parts'] == [
+        {'hit': False},
+        {'hit': True, 'effect_damage': [
+            {'name': 'Удар Суда', 'damage': 3},
+            {'name': 'Печать Возмездия', 'damage': 0},
+        ]},
+        {'hit': True},
+    ]
+    assert summary['visual_radiant'] is True
+    assert not {'hp_before', 'hp_after', 'armor_class', 'components'} & summary.keys()
+    assert target_sheet(target).hp_current == 26
+    assert post(player, ROOT, command, key='chat-effect-damage').json() == response.json()
 
 
 @pytest.mark.parametrize(('resolution', 'damage_type', 'die', 'starting_hp', 'end_hp', 'outcomes'), [

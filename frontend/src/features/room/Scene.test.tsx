@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import Scene, { TargetDamage } from './Scene';
 import { MemoryRouter } from 'react-router-dom';
 import ActionList from '../sheets/ActionList';
 import AbilityEditor from '../sheets/AbilityEditor';
 import { AttackEffectsCast } from '../sheets/AttackEffects';
+import { RollResult } from './RollResult';
 const mocks=vi.hoisted(()=>({master:false,mutate:vi.fn(),targets:[] as any[],requests:[] as any[],history:null as any,paths:[] as string[]}));
 vi.mock('../../app',()=>({useApp:()=>({masterMode:mocks.master,cid:'1',sid:'1',user:{id:1},refresh:vi.fn(),notify:vi.fn()}),
  useData:(path:string)=>{mocks.paths.push(path);return ({data:path.startsWith('/scene/targets/')?{targets:mocks.targets,damage_types:{fire:'Огонь',cold:'Холод'}}:mocks.history??mocks.requests,isPending:false})},
@@ -156,6 +157,26 @@ it('can decline a rolled rider on a particular hit without altering damage value
  fireEvent.click(screen.getByLabelText(/Удар Суда · \+7/));
  fireEvent.click(screen.getByText('Нанести урон (1)'));
  expect(mocks.mutate.mock.calls[0][0].body.outcomes['1']).toEqual({effects:[],hit:true});
+});
+
+it('groups limited riders after the damage total and keeps every-hit riders in the individual rolls', () => {
+  const judgment = { id: 'judgment', name: 'Удар Суда', damage_type: 'base', dice: '1d8', frequency: 'turn' };
+  const seal = { id: 'seal', name: 'Печать Возмездия', damage_type: 'necrotic', dice: '1d8', frequency: 'action' };
+  const poison = { id: 'poison', name: 'Яд', damage_type: 'poison', dice: '1d4', frequency: 'all', roll: { total: 3 } };
+  render(<RollResult event={{ kind: 'ability', payload: { label: 'Атака под меткой', total_damage: 12,
+    parts: [4, 7].map(total => ({ damage: { total: 6, formula: '1d8' }, effects: [
+      { ...judgment, roll: { total } }, { ...seal, roll: { total: 8 } }, poison,
+    ] })),
+  } }}/>);
+  const shared = within(screen.getByRole('region', { name: 'Эффекты на всё действие' }));
+  expect(shared.getByText('Удар Суда')).toBeInTheDocument();
+  expect(shared.getByText('Печать Возмездия')).toBeInTheDocument();
+  expect(shared.getByText('Бросок 1 · +4 (1d8)')).toBeInTheDocument();
+  expect(shared.getByText('Бросок 2 · +7 (1d8)')).toBeInTheDocument();
+  expect(screen.getAllByText('Удар Суда')).toHaveLength(1);
+  expect(screen.getAllByText('Печать Возмездия')).toHaveLength(1);
+  expect(screen.getAllByText('Яд')).toHaveLength(2);
+  expect(screen.getByText('Сумма основного урона: 12')).toBeInTheDocument();
 });
 
 
