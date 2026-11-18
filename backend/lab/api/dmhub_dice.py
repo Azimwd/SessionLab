@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from lab.models import RoomEvent
 from lab.services.sheets import perform_roll
 from .common import is_dm
-from .dmhub import _line
+from .dmhub import BRIDGE_EVENTS, _line, bridge_lines
 from .dmhub_edit import PersonalSheetAPI
 from .dmhub_sheets import access_for, bridge_payload, response_for
 
@@ -35,8 +35,9 @@ class NativeDiceEvents(PersonalSheetAPI):
     @extend_schema(responses=OpenApiTypes.OBJECT)
     def get(self, request):
         access = access_for(request)
-        events = RoomEvent.objects.filter(campaign=access.campaign, kind__in=('roll', 'ability'))
-        if not is_dm(access.campaign, access.user):
+        master = is_dm(access.campaign, access.user)
+        events = RoomEvent.objects.filter(BRIDGE_EVENTS, campaign=access.campaign)
+        if not master:
             events = events.filter(visibility='public')
         cursor = request.query_params.get('cursor', 'latest')
         if cursor == 'latest':
@@ -48,4 +49,5 @@ class NativeDiceEvents(PersonalSheetAPI):
         except (ValueError, TypeError):
             raise ValidationError('Некорректный курсор')
         rows = list(events.filter(id__gt=cursor).order_by('id')[:50])
-        return Response({'events': [_line(row) for row in rows], 'cursor': rows[-1].pk if rows else cursor}, headers={'Cache-Control': 'no-store'})
+        return Response({'events': bridge_lines(rows, include_private=master), 'cursor': rows[-1].pk if rows else cursor},
+                        headers={'Cache-Control': 'no-store'})

@@ -1,4 +1,4 @@
-"""Public, snapshot-only presentation for compact native DMHub result cards."""
+"""Presentation for compact native DMHub result cards."""
 
 ATTRIBUTES = {'str': 'Сила', 'dex': 'Ловкость', 'con': 'Телосложение',
               'int': 'Интеллект', 'wis': 'Мудрость', 'cha': 'Харизма'}
@@ -30,7 +30,48 @@ def _detail(roll):
     return _text(' · '.join(terms), 4000)
 
 
-def result_card(event):
+DEFENSES = {'resistance': 'сопротивление', 'immunity': 'иммунитет', 'vulnerability': 'уязвимость'}
+
+
+def _attack_damage_rows(rows, part, suffix, resolution):
+    if resolution is None:
+        for effect in part.get('effects', []):
+            roll = effect['roll']
+            frequency = {'turn': 'раз за ход', 'action': 'на первое попадание действия'}.get(
+                effect.get('frequency'), 'на каждом попадании')
+            dice = _detail(roll) or _text(roll.get('formula') or effect.get('dice'), 120)
+            bonus = effect.get('critical_bonus')
+            if bonus:
+                dice += ' · доп. кубики на крите: ' + (_detail(bonus) or _text(bonus.get('formula'), 120))
+            rows.append({'label': _text(effect['name'], 80) + suffix,
+                         'value': f"{effect.get('sign', 1) * roll['total']:+}",
+                         'detail': f'Возможный эффект · {frequency} · {dice}', 'tone': 'roll'})
+        return
+    if not resolution['hit']:
+        rows.append({'label': 'Промах' + suffix, 'value': 0, 'detail': 'Урон не нанесён', 'tone': 'damage'})
+        return
+    components = resolution.get('components', [])
+    has_effect = any('reduction' in component for component in components)
+    damage_components = [component for component in components if 'final_damage' in component]
+    for component in components:
+        if 'reduction' in component:
+            rows.append({'label': _text(component['name'], 80) + suffix,
+                         'value': f"−{component['reduction']}", 'detail': 'Снижение основного урона до сопротивлений',
+                         'tone': 'roll'})
+    for index, component in enumerate(damage_components):
+        defense = DEFENSES.get(component.get('defense'))
+        detail = f'До защиты: {component["base_damage"]} · {defense}' if defense else ''
+        rows.append({'label': _text(component['name'], 80) + suffix,
+                     'value': component['final_damage'], 'detail': detail, 'tone': 'damage'})
+    has_effect = has_effect or len(damage_components) > 1
+    detail = 'Доп. эффекты сработали' if has_effect else 'Без дополнительных эффектов'
+    if not damage_components and (defense := DEFENSES.get(resolution.get('defense'))):
+        detail += f' · До защиты: {resolution["base_damage"]} · {defense}'
+    rows.append({'label': 'Применённый урон' + suffix, 'value': resolution['final_damage'],
+                 'detail': detail, 'tone': 'damage'})
+
+
+def result_card(event, resolutions=None):
     p = event.payload
     card = {'rows': [], 'saves': [], 'tags': [],
             'description': _text(p.get('description')),
@@ -47,12 +88,22 @@ def result_card(event):
     if p.get('spell_save_dc') is not None:
         card['tags'].append(f"СЛ {p['spell_save_dc']}")
     parts = p.get('parts') or [p]
+    resolutions = resolutions or {}
+    attack = p.get('resolution') == 'attack' or bool(resolutions) or any(part.get('effects') for part in parts)
+    first_effect_ids = {key.split(':', 1)[0] for key in p.get('advantage_effects', [])}
     for i, part in enumerate(parts, 1):
         suffix = f' · {i}' if len(parts) > 1 else ''
         roll = part.get('roll')
         if roll:
+            details = _detail(roll)
+            if i == 1:
+                names = [_text(effect['name'], 80) for effect in part.get('effects', [])
+                         if effect['id'] in first_effect_ids]
+                if names:
+                    reason = 'преимущество погасило помеху' if roll.get('mode') == 'normal' else 'преимущество'
+                    details += f' · {", ".join(names)}: {reason}'
             card['rows'].append({'label': _text(roll.get('formula') or ('Бросок' if event.kind == 'roll' else 'Атака'), 100) + suffix,
-                                 'value': roll.get('total', '?'), 'detail': _detail(roll), 'tone': 'roll'})
+                                 'value': roll.get('total', '?'), 'detail': details, 'tone': 'roll'})
         damage = part.get('damage')
         if damage:
             detail = _detail(damage) or _text(damage.get('formula'), 100)
@@ -60,8 +111,11 @@ def result_card(event):
             if extras:
                 detail += ' · усиление: ' + ' + '.join(extras)
             dtype = _text(p.get('damage_type') or 'Урон / эффект', 50)
-            card['rows'].append({'label': dtype + suffix, 'value': damage.get('total', '?'),
+            label = 'Бросок основного урона' if attack else dtype
+            card['rows'].append({'label': label + suffix, 'value': damage.get('total', '?'),
                                  'detail': detail, 'tone': 'heal' if dtype.casefold() in ('лечение', 'healing', 'heal') else 'damage'})
+        if attack:
+            _attack_damage_rows(card['rows'], part, suffix, resolutions.get(i - 1))
         save = part.get('save')
         if save:
             record = {'ability': ATTRIBUTES.get(save.get('ability'), _text(save.get('ability'), 30)),
@@ -70,5 +124,13 @@ def result_card(event):
                 record.update(failed=save['failed_damage'], passed=save.get('success_damage', 0))
             card['saves'].append(record)
     if len(parts) > 1 and p.get('total_damage') is not None:
-        card['rows'].append({'label': 'Общий результат', 'value': p['total_damage'], 'detail': '', 'tone': 'damage'})
+        card['rows'].append({'label': 'Сумма бросков основного урона' if attack else 'Общий результат',
+                             'value': p['total_damage'], 'detail': '', 'tone': 'damage'})
+    if len(parts) > 1 and resolutions:
+        card['rows'].append({'label': 'Всего применено урона', 'value': sum(r['final_damage'] for r in resolutions.values()),
+                             'detail': f'Рассчитано бросков: {len(resolutions)} из {len(parts)}', 'tone': 'damage'})
+    if resolutions and len(resolutions) == len(parts):
+        card['damage_resolved'] = True
+    if attack and not card['notice'] and any(part.get('damage') for part in parts) and len(resolutions) < len(parts):
+        card['notice'] = 'Для нерассчитанных бросков показаны кубики и возможные эффекты. Применённый урон появится после выбора цели и исхода.'
     return card

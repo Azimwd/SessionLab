@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import pytest
 from rest_framework.test import APIClient
 
@@ -83,6 +85,54 @@ def test_lua_chat_message_is_code_safe():
     assert code.startswith('chat.Send(string.char(')
     assert 'os.execute' not in code
     assert 'bad' not in code
+
+
+def test_bridge_updates_attack_card_with_per_hit_damage(world):
+    from .test_attack_effects import apply, attack, cast, effect
+    from .test_scene import targets
+    from .test_dmhub_dice import personal
+
+    dm, player, _, campaign, _, _ = world
+    _, rows = targets(world, {'radiant': 'resistance'})
+    target = rows[0]['id']
+    strike = attack(world, [
+        effect(name='Удар Суда', dice='8'),
+        effect(id='seal', name='Печать', dice='3', frequency='action', damage_type='necrotic',
+               target_required=True, advantage_first=True),
+    ], count=3, dice='7')
+    token = post(client(dm), scoped('/api/dm/integrations/dmhub/', campaign), {'action': 'rotate'}).json()['data']['token']
+    consumer = APIClient(HTTP_AUTHORIZATION='Bearer ' + token)
+    feeds = [(consumer, '/api/integrations/dmhub/events/'),
+             (personal(player, campaign), '/api/integrations/dmhub/dice/events/')]
+    with patch('lab.services.dice.secrets.randbelow', return_value=10):
+        saved = cast(world, strike, {'effect_target': target})
+    for api, path in feeds:
+        card = api.get(f'{path}?cursor=0').json()['data']['events'][-1]['card']
+        assert 'Печать: преимущество' in card['rows'][0]['detail']
+        assert any(row['label'] == 'Удар Суда · 2' and 'Возможный эффект' in row['detail']
+                   for row in card['rows'])
+
+    missed = post(client(player), scoped('/api/scene/damage/', campaign), {
+        'source_event': saved['id'], 'part_index': 0, 'targets': [target],
+        'outcomes': {str(target): {'hit': False}},
+    })
+    assert missed.status_code == 200, missed.json()
+    assert apply(world, saved, target, 1).status_code == 200
+    assert apply(world, saved, target, 2).status_code == 200
+    for api, path in feeds:
+        updates = api.get(f'{path}?cursor={saved["id"]}').json()['data']['events']
+        assert len(updates) == 3 and all(row['card_of'] == saved['id'] for row in updates)
+        card = updates[-1]['card']
+        assert card['damage_resolved'] is True
+        result = {row['label']: row for row in card['rows']}
+        assert result['Промах · 1']['value'] == 0
+        assert result['Удар Суда · 2']['value'] == 4
+        assert result['Печать · 2']['value'] == 3
+        assert result['Применённый урон · 2']['value'] == 14
+        assert result['Применённый урон · 3']['detail'] == 'Без дополнительных эффектов'
+        assert result['Применённый урон · 3']['value'] == 7
+        assert 'Печать · 3' not in result and result['Всего применено урона']['value'] == 21
+        assert not any(name in str(card) for name in ('hp_before', 'hp_after', 'armor_class'))
 
 
 def test_native_result_cards_use_public_saved_breakdowns(world):

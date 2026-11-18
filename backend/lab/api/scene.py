@@ -336,7 +336,7 @@ def apply_damage(row, campaign, user, data, privileged=False, *, emit_event=True
     row.save()
     if emit_event:
         event(campaign, active_session(campaign), user, None, 'damage', {'label': 'Урон применён',
-              'target_name': t.name, 'source_event': row.source_event_id},
+              'target_name': t.name, 'source_event': row.source_event_id, 'dmhub_attack_update': row.is_attack},
               row.source_event.visibility if t.visible else 'dm')
 
 

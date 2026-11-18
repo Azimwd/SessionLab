@@ -2,9 +2,10 @@
 import hashlib
 import hmac
 import secrets
+from collections import defaultdict
 
 from django.db import transaction
-from django.db.models import Max
+from django.db.models import Max, Q
 from django.http import JsonResponse
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET
@@ -14,7 +15,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from lab.models import AuditLog, Campaign, DMHubBridge, RoomEvent
+from lab.models import AuditLog, Campaign, DamageApplication, DMHubBridge, RoomEvent
 from .common import campaign_for
 from .dmhub_cards import result_card
 
@@ -54,7 +55,10 @@ class BridgeSettings(APIView):
         return Response(result)
 
 
-def _line(event):
+BRIDGE_EVENTS = Q(kind__in=('roll', 'ability')) | Q(kind='damage', payload__dmhub_attack_update=True)
+
+
+def _line(event, resolutions=None):
     p = event.payload
     def clean(value, limit):
         return " ".join(str(value).split())[:limit]
@@ -121,8 +125,35 @@ def _line(event):
     return {
         "id": event.pk, "session": event.session_id, "text": text[:900],
         "actor": who, "title": label, "kind": event.kind, "visibility": event.visibility,
-        "summary": summary[:700], "display": display, "card": result_card(event),
+        "summary": summary[:700], "display": display, "card": result_card(event, resolutions),
     }
+
+
+def bridge_lines(rows, *, include_private=False):
+    if not rows:
+        return []
+    updates = [row.payload['source_event'] for row in rows if row.kind == 'damage']
+    sources = RoomEvent.objects.filter(campaign_id=rows[0].campaign_id, kind='ability', pk__in=updates)
+    if not include_private:
+        sources = sources.filter(visibility='public')
+    sources = sources.in_bulk()
+    ability_ids = set(sources) | {row.pk for row in rows if row.kind == 'ability'}
+    applied = DamageApplication.objects.filter(source_event_id__in=ability_ids, is_attack=True, status='applied')
+    if not include_private:
+        applied = applied.filter(target__visible=True)
+    resolutions = defaultdict(dict)
+    for event_id, index, resolution in applied.values_list('source_event_id', 'part_index', 'resolution'):
+        if type(resolution.get('hit')) is bool and 'final_damage' in resolution:
+            resolutions[event_id][index] = resolution
+    result = []
+    for row in rows:
+        if row.kind != 'damage':
+            result.append(_line(row, resolutions.get(row.pk)))
+        elif source := sources.get(row.payload['source_event']):
+            line = _line(source, resolutions.get(source.pk))
+            line.update(id=row.pk, card_of=source.pk, visibility=row.visibility)
+            result.append(line)
+    return result
 
 
 @require_GET
@@ -137,9 +168,7 @@ def bridge_events(request):
     bridge = DMHubBridge.objects.select_related("campaign").filter(token_hash=digest, enabled=True, campaign__deleted_at__isnull=True).first()
     if bridge is None or not hmac.compare_digest(bridge.token_hash, digest):
         return JsonResponse({"data": None, "error": "Недействительный ключ моста"}, status=401)
-    events = RoomEvent.objects.filter(
-        campaign_id=bridge.campaign_id, visibility="public", kind__in=("roll", "ability")
-    )
+    events = RoomEvent.objects.filter(BRIDGE_EVENTS, campaign_id=bridge.campaign_id, visibility="public")
     latest = events.aggregate(value=Max("id"))["value"] or 0
     cursor_param = request.GET.get("cursor", "latest")
     if cursor_param == "latest":
@@ -152,6 +181,6 @@ def bridge_events(request):
         return JsonResponse({"data": None, "error": "Некорректный курсор"}, status=400)
     rows = list(events.filter(id__gt=cursor).order_by("id")[:50])
     return JsonResponse({"data": {
-        "events": [_line(row) for row in rows],
+        "events": bridge_lines(rows),
         "cursor": rows[-1].id if rows else cursor,
     }, "error": None})
