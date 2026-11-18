@@ -58,6 +58,8 @@ def _attack_damage_rows(rows, part, suffix, resolution):
                          'tone': 'roll'})
     for index, component in enumerate(damage_components):
         defense = DEFENSES.get(component.get('defense'))
+        if index == 0 and not defense and component['final_damage'] == (part.get('damage') or {}).get('total'):
+            continue
         detail = f'До защиты: {component["base_damage"]} · {defense}' if defense else ''
         rows.append({'label': _text(component['name'], 80) + suffix,
                      'value': component['final_damage'], 'detail': detail, 'tone': 'damage'})
