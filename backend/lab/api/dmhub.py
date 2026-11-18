@@ -60,6 +60,7 @@ BRIDGE_EVENTS = Q(kind__in=('roll', 'ability')) | Q(kind='damage', payload__dmhu
 
 def _line(event, resolutions=None):
     p = event.payload
+    resolutions = resolutions or {}
     def clean(value, limit):
         return " ".join(str(value).split())[:limit]
 
@@ -78,11 +79,14 @@ def _line(event, resolutions=None):
         level_text = f", ячейка {level}" if p.get("kind") == "spell" and level else ""
         parts = p.get("parts") or [p]
         details = []
-        for part in parts:
+        for index, part in enumerate(parts):
+            resolution = resolutions.get(index)
             fragments = []
             if part.get("roll"):
                 fragments.append(f"атака {part['roll'].get('total', '?')}")
-            if part.get("damage"):
+            if resolution:
+                fragments.append(f"урон {resolution['final_damage']}" if resolution['hit'] else 'промах')
+            elif part.get("damage") and p.get('resolution') != 'attack':
                 damage_type = clean(p.get("damage_type") or "результат", 50)
                 fragments.append(f"{damage_type} {part['damage'].get('total', '?')}")
             if part.get("save"):
@@ -98,9 +102,13 @@ def _line(event, resolutions=None):
             details = [display["description"][:220]]
         text = f"{who}: {label}{level_text}" + (" — " + "; ".join(filter(None, details)) if any(details) else "")
         first = parts[0] if parts else {}
+        first_resolution = resolutions.get(0)
         if first.get("roll"):
-            display["primary"] = {"label": "Атака", "value": first["roll"].get("total", "?")}
-        if first.get("damage"):
+            name = "Промах" if first_resolution and not first_resolution['hit'] else "Атака"
+            display["primary"] = {"label": name, "value": first["roll"].get("total", "?")}
+        if first_resolution and first_resolution['hit']:
+            display["secondary"] = {"label": "Урон", "value": first_resolution['final_damage']}
+        elif first.get("damage") and not first_resolution and p.get('resolution') != 'attack':
             damage = {"label": "Урон", "value": first["damage"].get("total", "?")}
             display["secondary" if display["primary"] else "primary"] = damage
         if first.get("save"):
@@ -112,7 +120,9 @@ def _line(event, resolutions=None):
                     f"Провал {save['failed_damage']} · успех {save.get('success_damage', 0)}"
                 )
         if len(parts) > 1:
-            display["detail"] = f"{len(parts)} бросков · всего урона {p.get('total_damage', '?')}"
+            display["detail"] = f"{len(parts)} бросков"
+            if p.get('resolution') != 'attack' and not resolutions:
+                display["detail"] += f" · всего урона {p.get('total_damage', '?')}"
         elif level_text:
             display["detail"] = f"Ячейка {level}" + (
                 f" · {display['detail']}" if display["detail"] else ""

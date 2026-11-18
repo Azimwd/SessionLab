@@ -47,9 +47,6 @@ def _attack_damage_rows(rows, part, suffix, resolution):
                          'value': f"{effect.get('sign', 1) * roll['total']:+}",
                          'detail': f'Возможный эффект · {frequency} · {dice}', 'tone': 'roll'})
         return
-    if not resolution['hit']:
-        rows.append({'label': 'Промах' + suffix, 'value': 0, 'detail': 'Урон не нанесён', 'tone': 'damage'})
-        return
     components = resolution.get('components', [])
     if len(components) <= 1:
         return
@@ -91,6 +88,7 @@ def result_card(event, resolutions=None):
     for i, part in enumerate(parts, 1):
         suffix = f' · {i}' if len(parts) > 1 else ''
         resolution = resolutions.get(i - 1)
+        missed = resolution is not None and resolution['hit'] is False
         roll = part.get('roll')
         if roll:
             details = _detail(roll)
@@ -100,8 +98,11 @@ def result_card(event, resolutions=None):
                 if names:
                     reason = 'преимущество погасило помеху' if roll.get('mode') == 'normal' else 'преимущество'
                     details += f' · {", ".join(names)}: {reason}'
-            card['rows'].append({'label': _text(roll.get('formula') or ('Бросок' if event.kind == 'roll' else 'Атака'), 100) + suffix,
-                                 'value': roll.get('total', '?'), 'detail': details, 'tone': 'roll'})
+            label = _text(roll.get('formula') or ('Бросок' if event.kind == 'roll' else 'Атака'), 100) + suffix
+            card['rows'].append({'label': label + (' · Промах' if missed else ''),
+                                 'value': roll.get('total', '?'), 'detail': details, 'tone': 'miss' if missed else 'roll'})
+        if missed:
+            continue
         damage = part.get('damage')
         if damage:
             detail = _detail(damage) or _text(damage.get('formula'), 100)
@@ -124,10 +125,11 @@ def result_card(event, resolutions=None):
             if 'failed_damage' in save:
                 record.update(failed=save['failed_damage'], passed=save.get('success_damage', 0))
             card['saves'].append(record)
-    if len(parts) > 1 and p.get('total_damage') is not None:
+    has_miss = any(r['hit'] is False for r in resolutions.values())
+    if len(parts) > 1 and p.get('total_damage') is not None and not has_miss:
         card['rows'].append({'label': 'Сумма бросков основного урона' if attack else 'Общий результат',
                              'value': p['total_damage'], 'detail': '', 'tone': 'damage'})
-    if len(parts) > 1 and resolutions:
+    if len(parts) > 1 and any(r['hit'] is True for r in resolutions.values()):
         applied = sum(r['final_damage'] for r in resolutions.values())
         changed = any(not r['hit'] or len(r.get('components', [])) > 1
                       or r['final_damage'] != parts[index].get('damage', {}).get('total')

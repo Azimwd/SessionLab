@@ -125,7 +125,12 @@ def test_bridge_updates_attack_card_with_per_hit_damage(world):
         card = updates[-1]['card']
         assert card['damage_resolved'] is True
         result = {row['label']: row for row in card['rows']}
-        assert result['Промах · 1']['value'] == 0
+        miss = card['rows'][0]
+        assert miss['label'].endswith(' · 1 · Промах')
+        assert miss['tone'] == 'miss' and miss['value'] == saved['payload']['parts'][0]['roll']['total']
+        assert '[11, 11]' in miss['detail']
+        assert not any(row['label'].endswith(' · 1') for row in card['rows'])
+        assert 'промах' in updates[-1]['summary'] and 'результат 7' not in updates[-1]['summary']
         assert result['Удар Суда · 2']['value'] == 4
         assert result['Печать · 2']['value'] == 3
         assert result['Применённый урон · 2']['value'] == 14
@@ -133,6 +138,28 @@ def test_bridge_updates_attack_card_with_per_hit_damage(world):
         assert result['Бросок основного урона · 3']['value'] == 7
         assert 'Печать · 3' not in result and result['Всего применено урона']['value'] == 21
         assert not any(name in str(card) for name in ('hp_before', 'hp_after', 'armor_class'))
+
+
+@pytest.mark.parametrize('count', [1, 2])
+def test_bridge_all_misses_only_show_the_attack_rolls(count):
+    from types import SimpleNamespace
+    from lab.api.dmhub import _line
+
+    part = {
+        'roll': {'formula': '1d20+5', 'total': 17, 'values': [12, 10], 'chosen': 12,
+                 'mode': 'advantage', 'modifier': 5},
+        'damage': {'total': 99},
+        'effects': [{'id': 'judgment_strike', 'name': 'Удар Суда', 'roll': {'total': 9}}],
+    }
+    payload = part if count == 1 else {'parts': [part] * count, 'total_damage': 99 * count}
+    event = SimpleNamespace(pk=1, session_id=1, kind='ability', visibility='public', created_at=None,
+                            payload={**payload, 'resolution': 'attack'})
+    line = _line(event, {index: {'hit': False, 'final_damage': 0} for index in range(count)})
+    assert len(line['card']['rows']) == count
+    assert all(row['tone'] == 'miss' and row['value'] == 17 and '[12, 10]' in row['detail']
+               for row in line['card']['rows'])
+    assert line['display']['secondary'] is None
+    assert line['summary'].count('атака 17, промах') == count and '99' not in line['summary']
 
 
 def test_native_result_cards_use_public_saved_breakdowns(world):
