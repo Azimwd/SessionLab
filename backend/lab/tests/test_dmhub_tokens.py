@@ -193,14 +193,18 @@ def test_dmhub_reports_only_damage_from_effects_that_triggered(world):
     attack = CharacterAbility.objects.get(pk=cast['spell'])
     attack.kind, attack.level, attack.roll_count = 'attack', 0, 3
     attack.attack_effects = [
-        {'id': 'judgment', 'name': 'Удар Суда', 'dice': '7', 'damage_type': 'radiant', 'frequency': 'turn'},
-        {'id': 'seal', 'name': 'Печать Возмездия', 'dice': '8', 'damage_type': 'necrotic', 'frequency': 'action'},
+        {'id': 'judgment', 'name': 'Удар Суда', 'dice': '7', 'damage_type': 'radiant', 'frequency': 'turn',
+         'enabled': False, 'target_required': True},
+        {'id': 'seal', 'name': 'Печать Возмездия', 'dice': '8', 'damage_type': 'necrotic', 'frequency': 'action',
+         'enabled': False, 'target_required': True},
         {'id': 'reduction', 'name': 'Снижение урона', 'dice': '2', 'sign': -1, 'frequency': 'action'},
     ]
     attack.save()
     command = {key: cast[key] for key in ('session', 'game', 'caster')}
     command.update(command='act', action=attack.pk, action_version=attack.version, slot_level=0, distance_ft=5,
                    targets=[{'token': cast['token'], 'id': target.pk}])
+    assert post(player, ROOT, {**command, 'effects': ['unconfigured']}).status_code == 400
+    command['effects'] = {'1': 'judgment', '2': 'seal', '3': 'reduction'}
     with patch('lab.services.dice.secrets.randbelow', side_effect=[0, 17, 17]):
         response = post(player, ROOT, command, key='chat-effect-damage')
     assert response.status_code == 200, response.json()
@@ -217,6 +221,10 @@ def test_dmhub_reports_only_damage_from_effects_that_triggered(world):
     assert not {'hp_before', 'hp_after', 'armor_class', 'components'} & summary.keys()
     assert target_sheet(target).hp_current == 26
     assert post(player, ROOT, command, key='chat-effect-damage').json() == response.json()
+    with patch('lab.services.dice.secrets.randbelow', return_value=17):
+        response = post(player, ROOT, {**command, 'effects': {}})
+    assert response.status_code == 200, response.json()
+    assert response.json()['data']['event']['payload']['token_target']['parts'] == [{'hit': True}] * 3
 
 
 @pytest.mark.parametrize(('resolution', 'damage_type', 'die', 'starting_hp', 'end_hp', 'outcomes'), [

@@ -1,8 +1,156 @@
--- ASCII source: Russian UI labels use Lua UTF-8 byte escapes.
 -- SessionLab / DMHub bridge. Keep your campaign token private.
 local URL = "https://sessionlab.up.railway.app"
 local TOKEN = "PASTE_NEW_TOKEN_HERE"
 local PERSONAL_TOKEN = "PASTE_PERSONAL_SHEET_TOKEN_HERE"
+-- Inlined into each installable Main.lua. All four mods share one local preference.
+local connection = rawget(_G, "SessionLabConnectionV1")
+if not connection then
+    local setting = "sessionlab_personal_connection_v1"
+    local endpoint = "/api/integrations/dmhub/sheets/"
+    local listeners = {}
+    local window
+    connection = {}
+    rawset(_G, "SessionLabConnectionV1", connection)
+
+    if type(dmhub.RegisterSetting) == "function" then
+        pcall(dmhub.RegisterSetting, {id = setting, storage = "pergamepreference", default = {}})
+    end
+
+    function connection.scope(url)
+        local game, user = dmhub.gameid, dmhub.userid
+        if type(game) == "string" and game ~= "" and type(user) == "string" and user ~= "" then
+            return url .. "|" .. game .. "|" .. user
+        end
+    end
+
+    local function validKey(key)
+        return type(key) == "string" and #key >= 24 and #key <= 128
+            and key:match("^[A-Za-z0-9_%-]+$") and not key:find("^PASTE_")
+    end
+
+    function connection.get(url, fallback)
+        local scope = connection.scope(url)
+        local saved = scope and type(dmhub.GetSettingValue) == "function" and dmhub.GetSettingValue(setting)
+        local key = type(saved) == "table" and saved[scope]
+        if validKey(key) then return key end
+        if validKey(fallback) then return fallback end
+    end
+
+    function connection.onChange(name, url, callback)
+        listeners[name] = {url = url, callback = callback}
+    end
+
+    function connection.open(url)
+        local scope = connection.scope(url)
+        local gameHudType = rawget(_G, "GameHud")
+        local hud = rawget(_G, "gamehud") or (gameHudType and gameHudType.instance)
+        local host = hud and hud.dialogWorldPanel
+        if not scope or not host or host.valid == false or not gui or not gui.Input then return end
+        if window and window.scope == scope and window.panel.valid then return end
+        if window and window.panel.valid then window.panel:DestroySelf() end
+        local width = 360
+        local input = gui.Input{width = width, height = 32, halign = "center", text = "",
+            placeholderText = "\208\155\208\184\209\135\208\189\209\139\208\185 \208\186\208\187\209\142\209\135 SessionLab", fontSize = 13, color = "#f5ecff",
+            bgimage = "panels/square.png", bgcolor = "#262a3a", swallowPress = true}
+        local function label(text, size)
+            return gui.Label{text = text, width = width, height = "auto", fontSize = size,
+                halign = "center", textWrap = true, color = "#f5ecff", interactable = false}
+        end
+        local status = label(connection.get(url) and "\208\154\208\187\209\142\209\135 \209\131\208\182\208\181 \209\129\208\190\209\133\209\128\208\176\208\189\209\145\208\189. \208\156\208\190\208\182\208\189\208\190 \208\178\208\178\208\181\209\129\209\130\208\184 \208\189\208\190\208\178\209\139\208\185." or "", 13)
+        local panel, busy
+        local function current()
+            return window and window.panel == panel and panel.valid and connection.scope(url) == scope
+        end
+        local function close()
+            if panel and panel.valid then
+                input.text = ""
+                panel:DestroySelf()
+            end
+        end
+        local function save()
+            if busy or not current() then return end
+            local key = tostring(input.text or ""):match("^%s*(.-)%s*$")
+            if not validKey(key) then
+                status.text = "\208\146\209\129\209\130\208\176\208\178\209\140\209\130\208\181 \208\187\208\184\209\135\208\189\209\139\208\185 \208\186\208\187\209\142\209\135 \208\187\208\184\209\129\209\130\208\176 \208\184\208\183 \208\191\209\128\208\190\209\132\208\184\208\187\209\143 SessionLab."
+                return
+            end
+            input.text = ""
+            busy = true
+            status.text = "\208\159\209\128\208\190\208\178\208\181\209\128\209\143\209\142 \208\186\208\187\209\142\209\135\226\128\166"
+            local function fail(message)
+                if not busy or not current() then return end
+                busy = false
+                status.text = message
+            end
+            local function success(raw)
+                if not busy or not current() then return end
+                local ok, response = pcall(function()
+                    return type(raw) == "table" and raw or dmhub.FromJson(raw)
+                end)
+                if not ok or type(response) ~= "table" or type(response.data) ~= "table"
+                    or type(response.data.characters) ~= "table" then
+                    fail("\208\154\208\187\209\142\209\135 \208\189\208\181 \208\191\209\128\208\184\208\189\209\143\209\130. \208\159\209\128\208\190\208\178\208\181\209\128\209\140\209\130\208\181 \208\187\208\184\209\135\208\189\209\139\208\185 \208\186\208\187\209\142\209\135 \208\184 \208\186\208\176\208\188\208\191\208\176\208\189\208\184\209\142.")
+                    return
+                end
+                local previous = connection.get(url)
+                local saved = dmhub.GetSettingValue(setting)
+                local keys = {}
+                if type(saved) == "table" then
+                    for name, value in pairs(saved) do keys[name] = value end
+                end
+                keys[scope] = key
+                local written = pcall(dmhub.SetSettingValue, setting, keys)
+                if not written or connection.get(url) ~= key then
+                    fail("DMHub \208\189\208\181 \209\129\208\190\209\133\209\128\208\176\208\189\208\184\208\187 \208\186\208\187\209\142\209\135. \208\159\208\190\208\178\209\130\208\190\209\128\208\184\209\130\208\181 \208\191\208\190\208\180\208\186\208\187\209\142\209\135\208\181\208\189\208\184\208\181.")
+                    return
+                end
+                busy = false
+                status.text = "\208\159\208\190\208\180\208\186\208\187\209\142\209\135\208\181\208\189\208\190. \208\155\208\184\209\135\208\189\209\139\208\185 \208\186\208\187\209\142\209\135 \209\129\208\190\209\133\209\128\208\176\208\189\209\145\208\189 \208\180\208\187\209\143 \208\178\209\129\208\181\209\133 \208\188\208\190\208\180\208\190\208\178 SessionLab."
+                if previous ~= key then
+                    for _, listener in pairs(listeners) do
+                        if listener.url == url then pcall(listener.callback) end
+                    end
+                end
+            end
+            local function failure()
+                fail("\208\154\208\187\209\142\209\135 \208\189\208\181 \208\191\209\128\208\184\208\189\209\143\209\130 \208\184\208\187\208\184 SessionLab \208\189\208\181\208\180\208\190\209\129\209\130\209\131\208\191\208\181\208\189. \208\159\208\190\208\191\209\128\208\190\208\177\209\131\208\185\209\130\208\181 \208\181\209\137\209\145 \209\128\208\176\208\183.")
+            end
+            local ok = pcall(function()
+                net.Get{url = url .. endpoint, headers = {Authorization = "Bearer " .. key, Accept = "application/json"},
+                    success = success, error = failure, failure = failure}
+            end)
+            if not ok then failure() end
+            dmhub.Schedule(15, function() fail("SessionLab \208\189\208\181 \208\190\209\130\208\178\208\181\209\130\208\184\208\187 \208\178\208\190\208\178\209\128\208\181\208\188\209\143.") end)
+        end
+        local function button(text, press, color)
+            return gui.Button{text = text, width = width, height = 30, halign = "center",
+                color = "#f5ecff", bgcolor = color, bgimage = "panels/square.png",
+                cornerRadius = 5, swallowPress = true, press = press}
+        end
+        panel = gui.Panel{
+            width = width + 20, height = "auto", flow = "vertical", halign = "center", valign = "center",
+            floating = true, swallowPress = true, captureEscape = true, escape = close,
+            bgimage = "panels/square.png", bgcolor = "#17192b", cornerRadius = 9, vpad = 6,
+            thinkTime = 0.5, think = function() if not current() then close() end end,
+            destroy = function() if window and window.panel == panel then window = nil end end,
+            children = {label("\208\159\208\190\208\180\208\186\208\187\209\142\209\135\208\181\208\189\208\184\208\181 SessionLab", 16),
+                label("\208\161\208\186\208\190\208\191\208\184\209\128\209\131\208\185\209\130\208\181 \208\186\208\187\209\142\209\135 \208\184\208\183 \194\171\208\156\208\190\208\185 \208\191\209\128\208\190\209\132\208\184\208\187\209\140 \226\134\146 \208\156\208\190\208\185 \208\187\208\184\209\129\209\130 \208\178 DMHub\194\187 \208\178\209\139\208\177\209\128\208\176\208\189\208\189\208\190\208\185 \208\186\208\176\208\188\208\191\208\176\208\189\208\184\208\184.", 13),
+                input, status, button("\208\159\208\190\208\180\208\186\208\187\209\142\209\135\208\184\209\130\209\140", save, "#514479"), button("\208\151\208\176\208\186\209\128\209\139\209\130\209\140", close, "#262a3a")},
+        }
+        window = {panel = panel, scope = scope}
+        host:AddChild(panel)
+    end
+
+    local function open()
+        connection.open(URL)
+    end
+    if type(Commands.RegisterMacro) == "function" then
+        Commands.RegisterMacro{name = "slconnect", summary = "Open the SessionLab personal connection dialog", command = open}
+    else
+        Commands.slconnect = open
+    end
+end
+
 local INTERVAL = 3
 local CHAT_ENABLED = true
 local HISTORY = 6
@@ -16,8 +164,8 @@ local state = {
 }
 rawset(_G, "SessionLabBridgeRuntime", state)
 local handleAction, onEvent
-local function hasPersonal()
-    return PERSONAL_TOKEN~="" and PERSONAL_TOKEN:sub(1,6)~="PASTE_"
+local function personalKey()
+    return connection.get(URL, PERSONAL_TOKEN)
 end
 
 local dock = rawget(_G, "DockablePanel")
@@ -110,7 +258,11 @@ local function resultCard(ev)
         end
         if rich.components and rich.components~="" then items[#items+1]=label("\208\154\208\190\208\188\208\191\208\190\208\189\208\181\208\189\209\130\209\139: "..rich.components,inner,10,"#A0A6B2") end
         if #items<=2 then items[#items+1]=label(ev.summary~="" and ev.summary or "\208\161\208\188\208\190\209\130\209\128\208\184\209\130\208\181 \208\190\208\191\208\184\209\129\208\176\208\189\208\184\208\181 \208\180\208\181\208\185\209\129\209\130\208\178\208\184\209\143",inner,13,"#A0A6B2") end
-        items[#items+1]=label("\208\163\209\128\208\190\208\189 \208\184 \208\187\208\181\209\135\208\181\208\189\208\184\208\181 \208\191\209\128\208\184\208\188\208\181\208\189\209\143\209\142\209\130\209\129\209\143 \208\191\208\190 \209\128\208\181\209\136\208\181\208\189\208\184\209\142 \208\183\208\176 \209\129\209\130\208\190\208\187\208\190\208\188.",inner,10,"#858C9B")
+        if rich.notice == nil or rich.notice == "" then
+            if not rich.damage_resolved then
+                items[#items+1]=label("\208\163\209\128\208\190\208\189 \208\184 \208\187\208\181\209\135\208\181\208\189\208\184\208\181 \208\191\209\128\208\184\208\188\208\181\208\189\209\143\209\142\209\130\209\129\209\143 \208\191\208\190 \209\128\208\181\209\136\208\181\208\189\208\184\209\142 \208\183\208\176 \209\129\209\130\208\190\208\187\208\190\208\188.",inner,10,"#858C9B")
+            end
+        end
         return items
     end
     content=column(children(),inner,"center")
@@ -152,9 +304,13 @@ local function updateDice()
     if state.diceStatus then state.diceStatus.text=state.diceMessage or "" end
 end
 local function loadDiceContext()
-    if not hasPersonal() then state.diceMessage="\208\148\208\187\209\143 \208\177\209\128\208\190\209\129\208\186\208\190\208\178 \209\131\208\186\208\176\208\182\208\184\209\130\208\181 PERSONAL_TOKEN \226\128\148 \208\187\208\184\209\135\208\189\209\139\208\185 \208\186\208\187\209\142\209\135 \208\187\208\184\209\129\209\130\208\176." updateDice() return end
+    local token, scope = personalKey(), connection.scope(URL)
+    if not token then state.diceMessage="\208\159\208\190\208\180\208\186\208\187\209\142\209\135\208\184\209\130\208\181 \208\187\208\184\209\135\208\189\209\139\208\185 \208\186\208\187\209\142\209\135 \209\135\208\181\209\128\208\181\208\183 /slconnect." updateDice() return end
+    local function current()
+        return rawget(_G,"SessionLabBridgeRuntime")==state and scope==connection.scope(URL) and token==personalKey()
+    end
     local function success(raw)
-        if rawget(_G,"SessionLabBridgeRuntime")~=state then return end
+        if not current() then return end
         local ok,reply=pcall(function() return type(raw)=="table" and raw or dmhub.FromJson(raw) end)
         if not ok or type(reply)~="table" or type(reply.data)~="table" then
             state.diceMessage="\208\157\208\181 \209\131\208\180\208\176\208\187\208\190\209\129\209\140 \208\183\208\176\208\179\209\128\209\131\208\183\208\184\209\130\209\140 \208\191\208\181\209\128\209\129\208\190\208\189\208\176\208\182\208\181\208\185. \208\159\209\128\208\190\208\178\208\181\209\128\209\140\209\130\208\181 \208\187\208\184\209\135\208\189\209\139\208\185 \208\186\208\187\209\142\209\135." updateDice() return
@@ -167,15 +323,16 @@ local function loadDiceContext()
         renderDice()
     end
     local function failure()
-        if rawget(_G,"SessionLabBridgeRuntime")~=state then return end
-        state.context=nil state.diceMessage="\208\158\209\136\208\184\208\177\208\186\208\176 \208\183\208\176\208\179\209\128\209\131\208\183\208\186\208\184 \208\187\208\184\209\129\209\130\208\190\208\178. \208\159\209\128\208\190\208\178\208\181\209\128\209\140\209\130\208\181 PERSONAL_TOKEN." renderDice()
+        if not current() then return end
+        state.context=nil state.diceMessage="\208\158\209\136\208\184\208\177\208\186\208\176 \208\183\208\176\208\179\209\128\209\131\208\183\208\186\208\184 \208\187\208\184\209\129\209\130\208\190\208\178. \208\159\209\128\208\190\208\178\208\181\209\128\209\140\209\130\208\181 \208\187\208\184\209\135\208\189\209\139\208\185 \208\186\208\187\209\142\209\135." renderDice()
     end
-    local ok=pcall(function() net.Get{url=URL.."/api/integrations/dmhub/sheets/",headers={Authorization="Bearer "..PERSONAL_TOKEN,Accept="application/json"},success=success,error=failure,failure=failure} end)
+    local ok=pcall(function() net.Get{url=URL.."/api/integrations/dmhub/sheets/",headers={Authorization="Bearer "..token,Accept="application/json"},success=success,error=failure,failure=failure} end)
     if not ok then failure() end
 end
 local function sendDice()
     if state.rollBusy then return end
-    if not hasPersonal() then state.diceMessage="\208\163\208\186\208\176\208\182\208\184\209\130\208\181 PERSONAL_TOKEN \226\128\148 \208\187\208\184\209\135\208\189\209\139\208\185 \208\186\208\187\209\142\209\135 \208\187\208\184\209\129\209\130\208\176." updateDice() return end
+    local token, scope = personalKey(), connection.scope(URL)
+    if not token then connection.open(URL) return end
     if not state.context then state.diceMessage="\208\161\208\189\208\176\209\135\208\176\208\187\208\176 \208\183\208\176\208\179\209\128\209\131\208\183\208\184\209\130\208\181 \208\191\208\181\209\128\209\129\208\190\208\189\208\176\208\182\208\181\208\185." updateDice() return end
     if not state.rollPending then
         local bonus=tonumber(state.modifier)
@@ -189,14 +346,18 @@ local function sendDice()
     local pending=state.rollPending
     state.rollBusy=true state.diceMessage="\208\158\209\130\208\191\209\128\208\176\208\178\208\186\208\176 \208\177\209\128\208\190\209\129\208\186\208\176..." updateDice()
     local finished=false
+    local function current()
+        return not finished and rawget(_G,"SessionLabBridgeRuntime")==state
+            and state.rollPending==pending and scope==connection.scope(URL) and token==personalKey()
+    end
     local function failure(reason)
-        if finished or rawget(_G,"SessionLabBridgeRuntime")~=state then return end
+        if not current() then return end
         finished=true state.rollBusy=false
         state.diceMessage="\208\151\208\176\208\191\209\128\208\190\209\129 \208\189\208\181 \208\191\208\190\208\180\209\130\208\178\208\181\209\128\208\182\208\180\209\145\208\189: "..tostring(reason or "\208\190\209\136\208\184\208\177\208\186\208\176 \209\129\208\181\209\130\208\184"):sub(1,150)..". \208\159\208\190\208\178\209\130\208\190\209\128 \208\184\209\129\208\191\208\190\208\187\209\140\208\183\209\131\208\181\209\130 \209\130\208\190\209\130 \208\182\208\181 \208\186\208\187\209\142\209\135."
         updateDice()
     end
     local function success(raw)
-        if finished or rawget(_G,"SessionLabBridgeRuntime")~=state then return end
+        if not current() then return end
         local ok,reply=pcall(function() return type(raw)=="table" and raw or dmhub.FromJson(raw) end)
         if not ok or type(reply)~="table" or type(reply.data)~="table" or not reply.data.id then failure("\208\189\208\181\208\178\208\181\209\128\208\189\209\139\208\185 \208\190\209\130\208\178\208\181\209\130 API") return end
         finished=true state.rollBusy=false state.rollPending=nil
@@ -204,7 +365,7 @@ local function sendDice()
         onEvent(reply.data) updateDice()
     end
     local ok,err=pcall(function() net.Post{url=URL.."/api/integrations/dmhub/dice/",data=pending.body,
-        headers={Authorization="Bearer "..PERSONAL_TOKEN,Accept="application/json",["Content-Type"]="application/json",["Idempotency-Key"]=pending.key},success=success,error=failure,failure=failure} end)
+        headers={Authorization="Bearer "..token,Accept="application/json",["Content-Type"]="application/json",["Idempotency-Key"]=pending.key},success=success,error=failure,failure=failure} end)
     if not ok then failure(err) end
 end
 renderDice=function()
@@ -303,7 +464,7 @@ if dock and ui then
                         state.dieButtons={} state.formulaLabel=nil state.rollButton=nil state.diceStatus=nil end
                 end}
             renderHistory() renderDice() updatePanel()
-            if hasPersonal() and not state.context then loadDiceContext() end
+            if personalKey() and not state.context then loadDiceContext() end
             return panel
         end,
     }
@@ -316,17 +477,30 @@ onEvent=function(ev)
     local actor = tostring(ev.actor or "SessionLab")
     local title = tostring(ev.title or "\208\145\209\128\208\190\209\129\208\190\208\186")
     local summary = tostring(ev.summary or ev.text or ""):gsub("%s+", " ")
-    table.insert(state.cards, 1, {
+    local cardId = ev.card_of and fmt(ev.card_of) or id
+    local card = {
+        id = cardId,
         actor = actor, title = title, summary = summary,
         display = type(ev.display) == "table" and ev.display or nil,
         card = type(ev.card) == "table" and ev.card or nil,
         visibility = ev.visibility,
-    })
+    }
+    if ev.card_of then
+        for index, previous in ipairs(state.cards) do
+            if previous.id == cardId then
+                card.expanded = previous.expanded
+                state.cards[index] = card
+                renderHistory()
+                return
+            end
+        end
+    end
+    table.insert(state.cards, 1, card)
     while #state.cards > HISTORY do table.remove(state.cards) end
     renderHistory()
     updatePanel()
-    local relay = not hasPersonal() or (state.context and state.context.is_dm)
-    if CHAT_ENABLED and relay and ev.visibility~="dm" and type(ev.text) == "string" and ev.text ~= "" then
+    local relay = not personalKey() or (state.context and state.context.is_dm)
+    if CHAT_ENABLED and relay and not ev.card_of and ev.visibility~="dm" and type(ev.text) == "string" and ev.text ~= "" then
         pcall(chat.Send, actor .. " \194\183 " .. title
             .. (summary ~= "" and " \226\128\148 " .. summary or ""))
     end
@@ -336,6 +510,9 @@ local poll
 poll = function(run)
     if _G.SessionLabBridgeRuntime ~= state or not state.active
         or state.run ~= run or state.busy then return end
+    local token = personalKey()
+    local scope = connection.scope(URL)
+    if scope ~= state.scope then handleAction("stop") return end
     state.busy = true
     local finished = false
     local function finish()
@@ -350,6 +527,7 @@ poll = function(run)
     local function success(body)
         if finished then return end
         if _G.SessionLabBridgeRuntime ~= state or state.run ~= run then return end
+        if scope ~= connection.scope(URL) or token ~= personalKey() then finish() return end
         local ok, reply = pcall(function()
             if type(body) == "table" then return body end
             return dmhub.FromJson(body)
@@ -381,8 +559,8 @@ poll = function(run)
     end
     local ok, err = pcall(function()
         net.Get{
-            url = URL .. (hasPersonal() and "/api/integrations/dmhub/dice/events/?cursor=" or "/api/integrations/dmhub/events/?cursor=") .. state.cursor,
-            headers = { ["Authorization"] = "Bearer " .. (hasPersonal() and PERSONAL_TOKEN or TOKEN),
+            url = URL .. (token and "/api/integrations/dmhub/dice/events/?cursor=" or "/api/integrations/dmhub/events/?cursor=") .. state.cursor,
+            headers = { ["Authorization"] = "Bearer " .. (token or TOKEN),
                 ["Accept"] = "application/json" },
             success = success,
             error = failure, failure = failure,
@@ -408,16 +586,25 @@ handleAction = function(args)
         chat.Send("[SessionLab] /slbridge [start|stop|status|restart]")
         return
     elseif state.active then return end
-    if not hasPersonal() and (TOKEN == "PASTE_NEW_TOKEN_HERE" or TOKEN == "") then
-        chat.Send("[SessionLab] \208\146\209\129\209\130\208\176\208\178\209\140\209\130\208\181 \208\186\208\187\209\142\209\135 \208\178 TOKEN")
+    if not personalKey() and (TOKEN == "" or TOKEN:find("^PASTE_")) then
+        connection.open(URL)
         return
     end
     state.active, state.busy, state.cursor = true, false, "latest"
     state.connected = false
+    state.scope = connection.scope(URL)
     state.run = state.run + 1
     updatePanel()
     poll(state.run)
 end
+connection.onChange("bridge", URL, function()
+    state.context, state.actorId, state.rollPending, state.rollBusy = nil, nil, nil, false
+    state.seen, state.cards = {}, {}
+    renderHistory()
+    renderDice()
+    if state.diceHost then loadDiceContext() end
+    if state.active then handleAction("restart") end
+end)
 Commands.slbridge = handleAction
 -- End of SessionLab Bridge.
 -- Paste guard: no executable Lua follows this line.

@@ -51,7 +51,8 @@ def _attack_damage_rows(rows, part, suffix, resolution):
         rows.append({'label': 'Промах' + suffix, 'value': 0, 'detail': 'Урон не нанесён', 'tone': 'damage'})
         return
     components = resolution.get('components', [])
-    has_effect = any('reduction' in component for component in components)
+    if len(components) <= 1:
+        return
     damage_components = [component for component in components if 'final_damage' in component]
     for component in components:
         if 'reduction' in component:
@@ -63,12 +64,8 @@ def _attack_damage_rows(rows, part, suffix, resolution):
         detail = f'До защиты: {component["base_damage"]} · {defense}' if defense else ''
         rows.append({'label': _text(component['name'], 80) + suffix,
                      'value': component['final_damage'], 'detail': detail, 'tone': 'damage'})
-    has_effect = has_effect or len(damage_components) > 1
-    detail = 'Доп. эффекты сработали' if has_effect else 'Без дополнительных эффектов'
-    if not damage_components and (defense := DEFENSES.get(resolution.get('defense'))):
-        detail += f' · До защиты: {resolution["base_damage"]} · {defense}'
     rows.append({'label': 'Применённый урон' + suffix, 'value': resolution['final_damage'],
-                 'detail': detail, 'tone': 'damage'})
+                 'detail': '', 'tone': 'damage'})
 
 
 def result_card(event, resolutions=None):
@@ -93,6 +90,7 @@ def result_card(event, resolutions=None):
     first_effect_ids = {key.split(':', 1)[0] for key in p.get('advantage_effects', [])}
     for i, part in enumerate(parts, 1):
         suffix = f' · {i}' if len(parts) > 1 else ''
+        resolution = resolutions.get(i - 1)
         roll = part.get('roll')
         if roll:
             details = _detail(roll)
@@ -110,12 +108,15 @@ def result_card(event, resolutions=None):
             extras = [_detail(v) or _text(v.get('formula'), 100) for v in part.get('upcast', [])]
             if extras:
                 detail += ' · усиление: ' + ' + '.join(extras)
+            if (resolution and resolution['hit'] and len(resolution.get('components', [])) <= 1
+                    and (defense := DEFENSES.get(resolution.get('defense')))):
+                detail += f' · {defense}: {resolution["final_damage"]} урона'
             dtype = _text(p.get('damage_type') or 'Урон / эффект', 50)
             label = 'Бросок основного урона' if attack else dtype
             card['rows'].append({'label': label + suffix, 'value': damage.get('total', '?'),
                                  'detail': detail, 'tone': 'heal' if dtype.casefold() in ('лечение', 'healing', 'heal') else 'damage'})
         if attack:
-            _attack_damage_rows(card['rows'], part, suffix, resolutions.get(i - 1))
+            _attack_damage_rows(card['rows'], part, suffix, resolution)
         save = part.get('save')
         if save:
             record = {'ability': ATTRIBUTES.get(save.get('ability'), _text(save.get('ability'), 30)),
@@ -127,8 +128,13 @@ def result_card(event, resolutions=None):
         card['rows'].append({'label': 'Сумма бросков основного урона' if attack else 'Общий результат',
                              'value': p['total_damage'], 'detail': '', 'tone': 'damage'})
     if len(parts) > 1 and resolutions:
-        card['rows'].append({'label': 'Всего применено урона', 'value': sum(r['final_damage'] for r in resolutions.values()),
-                             'detail': f'Рассчитано бросков: {len(resolutions)} из {len(parts)}', 'tone': 'damage'})
+        applied = sum(r['final_damage'] for r in resolutions.values())
+        changed = any(not r['hit'] or len(r.get('components', [])) > 1
+                      or r['final_damage'] != parts[index].get('damage', {}).get('total')
+                      for index, r in resolutions.items() if 0 <= index < len(parts))
+        if len(resolutions) != len(parts) or changed:
+            card['rows'].append({'label': 'Всего применено урона', 'value': applied,
+                                 'detail': f'Рассчитано бросков: {len(resolutions)} из {len(parts)}', 'tone': 'damage'})
     if resolutions and len(resolutions) == len(parts):
         card['damage_resolved'] = True
     if attack and not card['notice'] and any(part.get('damage') for part in parts) and len(resolutions) < len(parts):

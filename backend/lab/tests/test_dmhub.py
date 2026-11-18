@@ -129,8 +129,8 @@ def test_bridge_updates_attack_card_with_per_hit_damage(world):
         assert result['Удар Суда · 2']['value'] == 4
         assert result['Печать · 2']['value'] == 3
         assert result['Применённый урон · 2']['value'] == 14
-        assert result['Применённый урон · 3']['detail'] == 'Без дополнительных эффектов'
-        assert result['Применённый урон · 3']['value'] == 7
+        assert 'Применённый урон · 3' not in result
+        assert result['Бросок основного урона · 3']['value'] == 7
         assert 'Печать · 3' not in result and result['Всего применено урона']['value'] == 21
         assert not any(name in str(card) for name in ('hp_before', 'hp_after', 'armor_class'))
 

@@ -2,6 +2,7 @@
 local URL = "https://sessionlab.up.railway.app"
 local TOKEN = "PASTE_NEW_TOKEN_HERE"
 local PERSONAL_TOKEN = "PASTE_PERSONAL_SHEET_TOKEN_HERE"
+-- @include SessionLabConnection_Source.lua
 local INTERVAL = 3
 local CHAT_ENABLED = true
 local HISTORY = 6
@@ -15,8 +16,8 @@ local state = {
 }
 rawset(_G, "SessionLabBridgeRuntime", state)
 local handleAction, onEvent
-local function hasPersonal()
-    return PERSONAL_TOKEN~="" and PERSONAL_TOKEN:sub(1,6)~="PASTE_"
+local function personalKey()
+    return connection.get(URL, PERSONAL_TOKEN)
 end
 
 local dock = rawget(_G, "DockablePanel")
@@ -109,7 +110,11 @@ local function resultCard(ev)
         end
         if rich.components and rich.components~="" then items[#items+1]=label("Компоненты: "..rich.components,inner,10,"#A0A6B2") end
         if #items<=2 then items[#items+1]=label(ev.summary~="" and ev.summary or "Смотрите описание действия",inner,13,"#A0A6B2") end
-        items[#items+1]=label("Урон и лечение применяются по решению за столом.",inner,10,"#858C9B")
+        if rich.notice == nil or rich.notice == "" then
+            if not rich.damage_resolved then
+                items[#items+1]=label("Урон и лечение применяются по решению за столом.",inner,10,"#858C9B")
+            end
+        end
         return items
     end
     content=column(children(),inner,"center")
@@ -151,9 +156,13 @@ local function updateDice()
     if state.diceStatus then state.diceStatus.text=state.diceMessage or "" end
 end
 local function loadDiceContext()
-    if not hasPersonal() then state.diceMessage="Для бросков укажите PERSONAL_TOKEN — личный ключ листа." updateDice() return end
+    local token, scope = personalKey(), connection.scope(URL)
+    if not token then state.diceMessage="Подключите личный ключ через /slconnect." updateDice() return end
+    local function current()
+        return rawget(_G,"SessionLabBridgeRuntime")==state and scope==connection.scope(URL) and token==personalKey()
+    end
     local function success(raw)
-        if rawget(_G,"SessionLabBridgeRuntime")~=state then return end
+        if not current() then return end
         local ok,reply=pcall(function() return type(raw)=="table" and raw or dmhub.FromJson(raw) end)
         if not ok or type(reply)~="table" or type(reply.data)~="table" then
             state.diceMessage="Не удалось загрузить персонажей. Проверьте личный ключ." updateDice() return
@@ -166,15 +175,16 @@ local function loadDiceContext()
         renderDice()
     end
     local function failure()
-        if rawget(_G,"SessionLabBridgeRuntime")~=state then return end
-        state.context=nil state.diceMessage="Ошибка загрузки листов. Проверьте PERSONAL_TOKEN." renderDice()
+        if not current() then return end
+        state.context=nil state.diceMessage="Ошибка загрузки листов. Проверьте личный ключ." renderDice()
     end
-    local ok=pcall(function() net.Get{url=URL.."/api/integrations/dmhub/sheets/",headers={Authorization="Bearer "..PERSONAL_TOKEN,Accept="application/json"},success=success,error=failure,failure=failure} end)
+    local ok=pcall(function() net.Get{url=URL.."/api/integrations/dmhub/sheets/",headers={Authorization="Bearer "..token,Accept="application/json"},success=success,error=failure,failure=failure} end)
     if not ok then failure() end
 end
 local function sendDice()
     if state.rollBusy then return end
-    if not hasPersonal() then state.diceMessage="Укажите PERSONAL_TOKEN — личный ключ листа." updateDice() return end
+    local token, scope = personalKey(), connection.scope(URL)
+    if not token then connection.open(URL) return end
     if not state.context then state.diceMessage="Сначала загрузите персонажей." updateDice() return end
     if not state.rollPending then
         local bonus=tonumber(state.modifier)
@@ -188,14 +198,18 @@ local function sendDice()
     local pending=state.rollPending
     state.rollBusy=true state.diceMessage="Отправка броска..." updateDice()
     local finished=false
+    local function current()
+        return not finished and rawget(_G,"SessionLabBridgeRuntime")==state
+            and state.rollPending==pending and scope==connection.scope(URL) and token==personalKey()
+    end
     local function failure(reason)
-        if finished or rawget(_G,"SessionLabBridgeRuntime")~=state then return end
+        if not current() then return end
         finished=true state.rollBusy=false
         state.diceMessage="Запрос не подтверждён: "..tostring(reason or "ошибка сети"):sub(1,150)..". Повтор использует тот же ключ."
         updateDice()
     end
     local function success(raw)
-        if finished or rawget(_G,"SessionLabBridgeRuntime")~=state then return end
+        if not current() then return end
         local ok,reply=pcall(function() return type(raw)=="table" and raw or dmhub.FromJson(raw) end)
         if not ok or type(reply)~="table" or type(reply.data)~="table" or not reply.data.id then failure("неверный ответ API") return end
         finished=true state.rollBusy=false state.rollPending=nil
@@ -203,7 +217,7 @@ local function sendDice()
         onEvent(reply.data) updateDice()
     end
     local ok,err=pcall(function() net.Post{url=URL.."/api/integrations/dmhub/dice/",data=pending.body,
-        headers={Authorization="Bearer "..PERSONAL_TOKEN,Accept="application/json",["Content-Type"]="application/json",["Idempotency-Key"]=pending.key},success=success,error=failure,failure=failure} end)
+        headers={Authorization="Bearer "..token,Accept="application/json",["Content-Type"]="application/json",["Idempotency-Key"]=pending.key},success=success,error=failure,failure=failure} end)
     if not ok then failure(err) end
 end
 renderDice=function()
@@ -302,7 +316,7 @@ if dock and ui then
                         state.dieButtons={} state.formulaLabel=nil state.rollButton=nil state.diceStatus=nil end
                 end}
             renderHistory() renderDice() updatePanel()
-            if hasPersonal() and not state.context then loadDiceContext() end
+            if personalKey() and not state.context then loadDiceContext() end
             return panel
         end,
     }
@@ -315,17 +329,30 @@ onEvent=function(ev)
     local actor = tostring(ev.actor or "SessionLab")
     local title = tostring(ev.title or "Бросок")
     local summary = tostring(ev.summary or ev.text or ""):gsub("%s+", " ")
-    table.insert(state.cards, 1, {
+    local cardId = ev.card_of and fmt(ev.card_of) or id
+    local card = {
+        id = cardId,
         actor = actor, title = title, summary = summary,
         display = type(ev.display) == "table" and ev.display or nil,
         card = type(ev.card) == "table" and ev.card or nil,
         visibility = ev.visibility,
-    })
+    }
+    if ev.card_of then
+        for index, previous in ipairs(state.cards) do
+            if previous.id == cardId then
+                card.expanded = previous.expanded
+                state.cards[index] = card
+                renderHistory()
+                return
+            end
+        end
+    end
+    table.insert(state.cards, 1, card)
     while #state.cards > HISTORY do table.remove(state.cards) end
     renderHistory()
     updatePanel()
-    local relay = not hasPersonal() or (state.context and state.context.is_dm)
-    if CHAT_ENABLED and relay and ev.visibility~="dm" and type(ev.text) == "string" and ev.text ~= "" then
+    local relay = not personalKey() or (state.context and state.context.is_dm)
+    if CHAT_ENABLED and relay and not ev.card_of and ev.visibility~="dm" and type(ev.text) == "string" and ev.text ~= "" then
         pcall(chat.Send, actor .. " · " .. title
             .. (summary ~= "" and " — " .. summary or ""))
     end
@@ -335,6 +362,9 @@ local poll
 poll = function(run)
     if _G.SessionLabBridgeRuntime ~= state or not state.active
         or state.run ~= run or state.busy then return end
+    local token = personalKey()
+    local scope = connection.scope(URL)
+    if scope ~= state.scope then handleAction("stop") return end
     state.busy = true
     local finished = false
     local function finish()
@@ -349,6 +379,7 @@ poll = function(run)
     local function success(body)
         if finished then return end
         if _G.SessionLabBridgeRuntime ~= state or state.run ~= run then return end
+        if scope ~= connection.scope(URL) or token ~= personalKey() then finish() return end
         local ok, reply = pcall(function()
             if type(body) == "table" then return body end
             return dmhub.FromJson(body)
@@ -380,8 +411,8 @@ poll = function(run)
     end
     local ok, err = pcall(function()
         net.Get{
-            url = URL .. (hasPersonal() and "/api/integrations/dmhub/dice/events/?cursor=" or "/api/integrations/dmhub/events/?cursor=") .. state.cursor,
-            headers = { ["Authorization"] = "Bearer " .. (hasPersonal() and PERSONAL_TOKEN or TOKEN),
+            url = URL .. (token and "/api/integrations/dmhub/dice/events/?cursor=" or "/api/integrations/dmhub/events/?cursor=") .. state.cursor,
+            headers = { ["Authorization"] = "Bearer " .. (token or TOKEN),
                 ["Accept"] = "application/json" },
             success = success,
             error = failure, failure = failure,
@@ -407,16 +438,25 @@ handleAction = function(args)
         chat.Send("[SessionLab] /slbridge [start|stop|status|restart]")
         return
     elseif state.active then return end
-    if not hasPersonal() and (TOKEN == "PASTE_NEW_TOKEN_HERE" or TOKEN == "") then
-        chat.Send("[SessionLab] Вставьте ключ в TOKEN")
+    if not personalKey() and (TOKEN == "" or TOKEN:find("^PASTE_")) then
+        connection.open(URL)
         return
     end
     state.active, state.busy, state.cursor = true, false, "latest"
     state.connected = false
+    state.scope = connection.scope(URL)
     state.run = state.run + 1
     updatePanel()
     poll(state.run)
 end
+connection.onChange("bridge", URL, function()
+    state.context, state.actorId, state.rollPending, state.rollBusy = nil, nil, nil, false
+    state.seen, state.cards = {}, {}
+    renderHistory()
+    renderDice()
+    if state.diceHost then loadDiceContext() end
+    if state.active then handleAction("restart") end
+end)
 Commands.slbridge = handleAction
 -- End of SessionLab Bridge.
 -- Paste guard: no executable Lua follows this line.

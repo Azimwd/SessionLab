@@ -266,7 +266,7 @@ def cast_spell(campaign, user, session, master, game, data):
 def act_on_map(campaign, user, session, master, game, data):
     if set(data) - {
         'command', 'session', 'game', 'caster', 'action', 'action_version',
-        'slot_level', 'distance_ft', 'targets',
+        'slot_level', 'distance_ft', 'targets', 'effects',
     }:
         raise ValidationError('Исход и величину урона рассчитывает SessionLab')
     caster = controlled_character(campaign, user, data.get('caster'))
@@ -311,10 +311,19 @@ def act_on_map(campaign, user, session, master, game, data):
         for target in targets
     ):
         raise ValidationError('Одна из целей больше недоступна. Выберите область заново.')
-    return resolve_action(campaign, user, action, data.get('slot_level'), targets, master, game, area=area)
+    effects = data.get('effects')
+    if 'effects' in data:
+        if isinstance(effects, dict) and len(effects) <= 6:
+            indexes = [str(i) for i in range(1, len(effects) + 1)]
+            if set(effects) == set(indexes):
+                effects = [effects[i] for i in indexes]
+        if not isinstance(effects, list) or len(effects) > 6:
+            raise ValidationError('Выберите настроенные эффекты атаки')
+    return resolve_action(campaign, user, action, data.get('slot_level'), targets, master, game,
+                          area=area, effects=effects)
 
 
-def resolve_action(campaign, user, ability, level, targets, master, game, *, legacy=False, area=False):
+def resolve_action(campaign, user, ability, level, targets, master, game, *, legacy=False, area=False, effects=None):
     single = targets[0] if len(targets) == 1 and not area else None
     options = {
         'slot_level': integer(level, 'Уровень ячейки', 0, 9),
@@ -322,6 +331,8 @@ def resolve_action(campaign, user, ability, level, targets, master, game, *, leg
     }
     if single:
         options['effect_target'] = single.pk
+    if effects is not None:
+        options['effects'] = effects
     roll = use_ability(campaign, user, ability.pk, options)
     parts = roll.payload.get('parts') or [roll.payload]
     if len(parts) * len(targets) > 200:

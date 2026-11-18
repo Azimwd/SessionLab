@@ -1,7 +1,7 @@
 local f=assert(io.open((arg and arg[1]) or 'scripts/SessionLabBridge_Main.lua','rb'))
 local source=f:read('*a') f:close()
 assert(not source:find('[\128-\255]'))
-source=source:gsub('local TOKEN = "PASTE_NEW_TOKEN_HERE"','local TOKEN = "PASTE_PERSONAL_SHEET_TOKEN_HERE"')
+source=source:gsub('local TOKEN = "PASTE_NEW_TOKEN_HERE"','local TOKEN = "test_campaign_bridge_key_1234567890123456"')
 local config,request,queue=nil,nil,{}
 local count,messages=0,0
 local function ctor(kind)
@@ -83,5 +83,11 @@ assert(state.body.children[1]==retained)
 Commands.slbridge('restart')
 request.success({data={events={{id=85,actor='Mage',title='Legacy',text='Legacy',summary='Saved',display={primary={label='Урон',value=52},secondary={label='СЛ спасброска',value=15},detail='Ячейка 6 · Провал 52 · успех 26'}}},cursor=85}})
 assert(find(panel,'Провал: 52 / Успех: 26'),'Older backend still gets a readable card') check(panel)
+local oldCount, oldMessages = #state.cards, messages
+Commands.slbridge('restart')
+request.success({data={events={{id=86,card_of=85,actor='Mage',title='Legacy',text='Updated',
+ card={rows={{label='Применённый урон · 2',value=14,tone='damage'}},damage_resolved=true}}},cursor=86}})
+assert(#state.cards==oldCount and messages==oldMessages and state.cursor=='86')
+assert(find(panel,'Применённый урон · 2') and not find(panel,'Провал: 52 / Успех: 26'))
 Commands.slbridge('stop')
 print('PASS: compact card bounds, full description toggle, save outcomes, legacy fallback, stable empty polling, connect/stop, lifecycle')
